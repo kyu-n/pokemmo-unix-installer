@@ -44,7 +44,7 @@ public class MainFrame extends JFrame implements ActionListener
 	
 	private int launchCountdown = 3;
 	
-	private JDialog configWindow = null;
+	private JDialog configWindow;
 	
 	public static MainFrame getInstance()
 	{
@@ -211,10 +211,7 @@ public class MainFrame extends JFrame implements ActionListener
         JPanel bottom_panel = new JPanel(new BorderLayout(0,0));
         {
         	configLauncher = new LocaleAwareButton("config.title.window");
-        	configLauncher.addActionListener((event) ->
-        	{
-        		SwingUtilities.invokeLater(() -> { configWindow.setVisible(true); });
-        	});
+        	configLauncher.addActionListener((event) ->	SwingUtilities.invokeLater(() -> configWindow.setVisible(true)));
         	
         	launchGame = new LocaleAwareButton("main.launch");
         	launchGame.setEnabled(false);
@@ -259,7 +256,7 @@ public class MainFrame extends JFrame implements ActionListener
 	
 	public void addDetail(final String string, final int progress, Object... params)
 	{
-		EventQueue.invokeLater(() -> { addDetailPrivate(string, progress, params); });
+		EventQueue.invokeLater(() -> addDetailPrivate(string, progress, params));
 	}
 
 	protected void addDetailPrivate(String string, int progress, Object... params)
@@ -286,7 +283,7 @@ public class MainFrame extends JFrame implements ActionListener
 	
 	public void updateDLSpeed(final long bytes_per_second)
 	{
-		EventQueue.invokeLater(() -> { dlSpeed.setText(humanReadableByteCount(bytes_per_second, false)+"/s"); });
+		EventQueue.invokeLater(() -> dlSpeed.setText(humanReadableByteCount(bytes_per_second, false)+"/s"));
 	}
 	
 	public static String humanReadableByteCount(long bytes, boolean si) {
@@ -379,7 +376,7 @@ public class MainFrame extends JFrame implements ActionListener
 						if(configWindow.isVisible())
 						{
 					    	launchGame.setTextKey("main.launch");
-					    	launchGame.addActionListener((event2) -> { parent.launchGame(); });
+					    	launchGame.addActionListener((event2) -> parent.launchGame());
 						}
 						else
 						{
@@ -395,12 +392,12 @@ public class MainFrame extends JFrame implements ActionListener
 		    {
 		    	timer.cancel();
 		    	launchGame.setTextKey(Config.getString("main.launch"));
-		    	launchGame.addActionListener((event2) -> { parent.launchGame(); });
+		    	launchGame.addActionListener((event2) -> parent.launchGame());
 		    });
 		}
 		else
 		{
-	    	launchGame.addActionListener((event) -> { parent.launchGame(); });
+	    	launchGame.addActionListener((event) -> parent.launchGame());
 		}
 	}
 }

@@ -6,7 +6,6 @@ import com.pokeemu.unix.ui.MainFrame;
 import com.pokeemu.unix.updater.MainFeed;
 import com.pokeemu.unix.updater.UpdateFeed;
 import com.pokeemu.unix.updater.UpdateFile;
-import com.pokeemu.unix.util.Base64;
 import com.pokeemu.unix.util.Util;
 
 import javax.swing.*;

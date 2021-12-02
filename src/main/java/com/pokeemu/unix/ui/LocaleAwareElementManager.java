@@ -25,6 +25,6 @@ public class LocaleAwareElementManager
 	
 	public void updateElements()
 	{
-		active_elements.forEach(e -> { e.updateLocale(); });
+		active_elements.forEach(LocaleAwareInterface::updateLocale);
 	}
 }

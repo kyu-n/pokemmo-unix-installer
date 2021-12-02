@@ -1,0 +1,70 @@
+buildscript {
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools:r8:3.0.73'
+    }
+}
+
+apply plugin: "java-library"
+apply plugin: "eclipse"
+apply plugin: "idea"
+
+compileJava {
+    options.release = 11
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
+}
+
+dependencies {
+    //NONE
+}
+
+project.ext.appName = "PokeMMO"
+project.ext.mainClassName = "com.pokeemu.unix.UnixInstaller"
+project.ext.unobfuscatedJarName = "unix-unobfuscated.jar"
+project.ext.mainJar = "unix-installer.jar"
+
+def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+
+jar {
+  archiveFileName = project.unobfuscatedJarName
+
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+  manifest {
+    attributes(
+      'Main-Class': project.mainClassName
+    )
+  }
+}
+
+task r8(type: JavaExec, dependsOn: jar) {
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
+
+    classpath = project.rootProject.buildscript.configurations.classpath
+    main = "com.android.tools.r8.R8"
+    workingDir = "${buildDir}/libs"
+    args '--lib', System.getProperty("java.home"), '--release', '--classfile', '--output', project.mainJar, '--pg-conf', "${project.projectDir}/resources/proguard-rules.pro", project.unobfuscatedJarName
+
+    doLast {
+      project.delete("${buildDir}/libs/"+project.unobfuscatedJarName)
+    }
+}
+
+task distJar(type: GradleBuild) {
+    buildName "distJar"
+    startParameter.projectProperties = gradle.startParameter.projectProperties
+    tasks = ['clean', 'jar', 'r8']
+}
+
+assemble.dependsOn distJar

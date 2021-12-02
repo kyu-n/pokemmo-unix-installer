@@ -1,0 +1,27 @@
+#Eclipse
+.metadata
+.classpath
+.project
+.settings
+
+#EclipsePhp
+.buildpath
+
+#Idea/android studio
+.idea
+*.iml
+*.iws
+*.ipr
+
+#Netbeans
+nbproject
+
+#gradle
+.gradle
+/local.properties
+
+#build/runtime artifacts
+build
+bin
+out
+gen

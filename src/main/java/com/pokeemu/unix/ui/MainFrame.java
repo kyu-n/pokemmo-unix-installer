@@ -189,6 +189,7 @@ public class MainFrame extends JFrame implements ActionListener
 					}
 	        		catch (Exception e)
 	        		{
+						e.printStackTrace();
 						showError(Config.getString("error.cant_open_client_folder"), Config.getString("error.io_exception"));
 					}
 	        	});

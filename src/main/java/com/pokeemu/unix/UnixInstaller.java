@@ -233,7 +233,11 @@ public class UnixInstaller
 		pb.inheritIO();
 
 		pb.environment().put("GTK_USE_PORTALS", "1");
-		
+
+		String snap_env = System.getenv("SNAP_DESKTOP_RUNTIME");
+		if(snap_env != null)
+			pb.environment().put("SNAP_DESKTOP_RUNTIME", snap_env);
+
 		System.out.println("Starting with params " + Arrays.toString(final_args.toArray(new String[0])));
 		
 		try

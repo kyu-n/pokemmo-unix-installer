@@ -231,6 +231,8 @@ public class UnixInstaller
 		ProcessBuilder pb = new ProcessBuilder(final_args);
 		pb.directory(new File(pokemmoDir));
 		pb.inheritIO();
+
+		pb.environment().put("GTK_USE_PORTALS", "1");
 		
 		System.out.println("Starting with params " + Arrays.toString(final_args.toArray(new String[0])));
 		

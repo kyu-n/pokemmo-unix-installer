@@ -308,6 +308,9 @@ public class UnixInstaller
 		
 	private boolean isPokemmoValid()
 	{
+		if(System.getenv("POKEMMO_NOVERIFY") != null)
+			return true;
+
 		/*
 		 * The list of files which MUST be updated before continuing to launch
 		 */

@@ -1,22 +1,19 @@
 package com.pokeemu.unix.updater;
 
-import java.io.StringReader;
-import java.net.URL;
-import java.security.PublicKey;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-
+import com.pokeemu.unix.UnixInstaller;
+import com.pokeemu.unix.config.Config;
+import com.pokeemu.unix.ui.MainFrame;
+import com.pokeemu.unix.util.CryptoUtil;
+import com.pokeemu.unix.util.Util;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xml.sax.InputSource;
 
-import com.pokeemu.unix.UnixInstaller;
-import com.pokeemu.unix.config.Config;
-import com.pokeemu.unix.ui.MainFrame;
-import com.pokeemu.unix.util.Base64;
-import com.pokeemu.unix.util.CryptoUtil;
-import com.pokeemu.unix.util.Util;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.StringReader;
+import java.net.URL;
+import java.security.PublicKey;
 
 /**
  * Responsible for loading IP/Port and MinRevision from the feeds

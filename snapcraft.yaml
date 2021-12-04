@@ -14,7 +14,7 @@ grade: devel
 confinement: strict
 architectures:
   - build-on: amd64
-    run-on: [amd64, arm64]
+    run-on: [amd64, armhf, arm64]
 
 apps:
   pokemmo:

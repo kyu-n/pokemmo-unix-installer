@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core18
-version: '1.0g'
+version: '1.0h'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -12,7 +12,7 @@ description: |
   This game requires a constant internet connection. Usage of this program requires an account
   with https://pokemmo.eu/ and requires you to accept the PokeMMO Terms of Service at login
 
-grade: devel
+grade: stable
 confinement: strict
 architectures:
   - build-on: arm64

@@ -4,7 +4,7 @@ base: core18
 version: '1.0b'
 contact: [linux@pokemmo.eu]
 issues: [https://github.com/kyu-n/pokemmo-unix-installer/issues, linux@pokemmo.eu]
-source-code: [https://github.com/kyu-n/pokemmo-unix-installer.git]
+source-code: 'https://github.com/kyu-n/pokemmo-unix-installer.git'
 website: 'https://pokemmo.eu/'
 summary: PokeMMO Game Client
 license: 'Proprietary'

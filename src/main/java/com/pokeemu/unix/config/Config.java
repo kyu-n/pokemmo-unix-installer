@@ -133,7 +133,11 @@ public class Config
 
 	private static String getConfigHome()
 	{
-		return Objects.requireNonNullElse(System.getenv("XDG_CONFIG_HOME"), System.getProperty("user.home")+"/.config");
+		String config_home = System.getenv("SNAP_USER_COMMON");
+		if(config_home == null)
+			config_home = Objects.requireNonNullElse(System.getenv("XDG_CONFIG_HOME"), System.getProperty("user.home")+"/.config");
+
+		return config_home;
 	}
 	
 	public static String getString(String key)

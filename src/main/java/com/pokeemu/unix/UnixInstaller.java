@@ -84,9 +84,11 @@ public class UnixInstaller
 	private void run()
 	{
 		String user_home = System.getProperty("user.home");
-		String xdg_data_home = Objects.requireNonNullElse(System.getenv("XDG_DATA_HOME"), user_home+"/.local/share");
+		String pokemmo_data_home = System.getenv("SNAP_USER_COMMON");
+		if(pokemmo_data_home == null)
+			pokemmo_data_home = Objects.requireNonNullElse(System.getenv("XDG_DATA_HOME"), user_home+"/.local/share");
 
-		pokemmoDir = xdg_data_home+"/pokemmo-client-"+Config.UPDATE_CHANNEL.toString()+"/";
+		pokemmoDir = pokemmo_data_home+"/pokemmo-client-"+Config.UPDATE_CHANNEL.toString()+"/";
 
 		jrePath = System.getProperty("java.home")+"/bin/java";
 		mainFrame = new MainFrame(this);

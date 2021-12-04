@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=PokeMMO
+Comment=PokeMMO Game Client
+Exec=pokemmo
+Keywords=game;adventure;multiplayer;online;emulator;monster;battle;
+Terminal=false
+Type=Application
+Icon=${SNAP}/meta/gui/pokemmo.png
+Categories=Game;AdventureGame;Emulator;RolePlaying;

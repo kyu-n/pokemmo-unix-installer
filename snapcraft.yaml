@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
-base: core18
-version: '1.0h'
+base: core20
+version: '1.1a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -12,17 +12,24 @@ description: |
   This game requires a constant internet connection. Usage of this program requires an account
   with https://pokemmo.eu/ and requires you to accept the PokeMMO Terms of Service at login
 
-grade: stable
+grade: devel
 confinement: strict
 architectures:
   - build-on: arm64
   - build-on: armhf
   - build-on: amd64
 
+package-repositories:
+  - type: apt
+    components: [main]
+    suites: [stable]
+    key-id: 99A5C88E3C5B1FA8B05A19D332E9750179FCEA62
+    url: https://apt.bell-sw.com/
+
 apps:
   pokemmo:
-    command: java -jar $SNAP/jar/unix-installer.jar
-    extensions: [gnome-3-34]
+    command: usr/lib/jvm/bellsoft-java11-runtime-$SNAPCRAFT_TARGET_ARCH/bin/java -jar $SNAP/jar/unix-installer.jar
+    extensions: [gnome-3-38]
     plugs:
       - network
       - opengl
@@ -37,36 +44,21 @@ apps:
       - hardware-observe
       - system-observe
     environment:
+      JAVA_HOME: "$SNAP/usr/lib/jvm/bellsoft-java11-runtime-$SNAPCRAFT_TARGET_ARCH"
       _JAVA_OPTIONS: -Dfile.encoding="UTF-8"
-      JAVA_HOME: "$SNAP/usr/lib/jvm/java-11-openjdk-$SNAPCRAFT_TARGET_ARCH"
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
-      PATH: "$JAVA_HOME/jre/bin:$PATH"
+      PATH: "$JAVA_HOME/bin/:$PATH"
 parts:
   pokemmo:
-    plugin: gradle
+    plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
-    gradle-output-dir: build/libs
-    gradle-openjdk-version: '11'
-    gradle-options: [distJar]
+    # For some reason, this stage will terminate prematurely unless the commands are chained..?
+    override-build: |
+      ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar
     stage-packages:
-      - openjdk-11-jre
       - libglu1-mesa
-  cleanup:
-    after: [pokemmo]  # Make this part run last; list all your other parts here
-    plugin: nil
-    build-snaps: [core18, gnome-3-34-1804]  # List all content-snaps you're using here
-    override-prime: |
-      set -eux
-      for snap in "core18" "gnome-3-34-1804"; do
-        cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$SNAPCRAFT_PRIME/{}" \;
-      done
-      for CRUFT in bug lintian man; do
-        rm -rf $SNAPCRAFT_PRIME/usr/share/$CRUFT
-      done
-      find $SNAPCRAFT_PRIME/usr/share/doc/ -type f -not -name 'copyright' -delete
-      find $SNAPCRAFT_PRIME/usr/share -type d -empty -delete
-      rm -f $SNAPCRAFT_PRIME/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libgio-2.0.so.0*
-      rm -f $SNAPCRAFT_PRIME/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libharfbuzz.so.0*
-      rm -f $SNAPCRAFT_PRIME/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libglib-2.0.so.0*
+      - bellsoft-java11-runtime
+    build-packages:
+      - bellsoft-java11

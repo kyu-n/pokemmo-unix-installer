@@ -40,7 +40,6 @@ apps:
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       PATH: "$JAVA_HOME/jre/bin:$PATH"
-      POKEMMO_NOVERIFY: '1'
 parts:
   pokemmo:
     plugin: gradle
@@ -58,7 +57,7 @@ parts:
     build-snaps: [core18, gnome-3-34-1804]  # List all content-snaps you're using here
     override-prime: |
       set -eux
-      for snap in "core18" "gnome-3-28-1804"; do
+      for snap in "core18" "gnome-3-34-1804"; do
         cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$SNAPCRAFT_PRIME/{}" \;
       done
       for CRUFT in bug lintian man; do

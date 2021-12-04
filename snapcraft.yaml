@@ -11,7 +11,7 @@ description: |
   with https://pokemmo.eu/ and requires you to accept the PokeMMO Terms of Service at login
 
 grade: devel
-confinement: devmode
+confinement: strict
 architectures:
   - build-on: amd64
     run-on: [amd64, arm64]
@@ -50,7 +50,6 @@ parts:
     gradle-options: [distJar]
     stage-packages:
       - openjdk-11-jre
-      - libcanberra-gtk3-module
   cleanup:
     after: [pokemmo]  # Make this part run last; list all your other parts here
     plugin: nil

@@ -1,7 +1,13 @@
 name: pokemmo
+title: PokeMMO
 base: core18
-version: '1.0'
-summary: PokeMMO emulator Game Client
+version: '1.0b'
+contact: [linux@pokemmo.eu]
+issues: [https://github.com/kyu-n/pokemmo-unix-installer/issues, linux@pokemmo.eu]
+source-code: [https://github.com/kyu-n/pokemmo-unix-installer.git]
+website: 'https://pokemmo.eu/'
+summary: PokeMMO Game Client
+license: 'Proprietary'
 description: |
   PokeMMO is an online-only emulator for several popular Nintendo DS & Game Boy Advance games,
   allowing you to play, talk, fight, and trade with other players in realtime across multiple
@@ -50,6 +56,7 @@ parts:
     gradle-options: [distJar]
     stage-packages:
       - openjdk-11-jre
+      - libglu1-mesa
   cleanup:
     after: [pokemmo]  # Make this part run last; list all your other parts here
     plugin: nil

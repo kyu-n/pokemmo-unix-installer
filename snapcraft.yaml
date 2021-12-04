@@ -14,7 +14,8 @@ description: |
 
 grade: devel
 confinement: strict
-architectures: [amd64, armhf, arm64]
+architectures:
+  - build-on: [amd64, armhf, arm64]
 
 apps:
   pokemmo:

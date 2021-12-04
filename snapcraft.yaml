@@ -1,0 +1,71 @@
+name: pokemmo
+base: core18
+version: '1.0'
+summary: PokeMMO emulator Game Client
+description: |
+  PokeMMO is an online-only emulator for several popular Nintendo DS & Game Boy Advance games,
+  allowing you to play, talk, fight, and trade with other players in realtime across multiple
+  platforms.
+
+  This game requires a constant internet connection. Usage of this program requires an account
+  with https://pokemmo.eu/ and requires you to accept the PokeMMO Terms of Service at login
+
+grade: devel
+confinement: devmode
+architectures:
+  - build-on: amd64
+    run-on: [amd64, arm64]
+
+apps:
+  pokemmo:
+    command: java -jar $SNAP/jar/unix-installer.jar
+    extensions: [gnome-3-34]
+    plugs:
+      - network
+      - opengl
+      - home
+      - joystick
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - unity7
+      - vcio
+      - hardware-observe
+      - system-observe
+    environment:
+      _JAVA_OPTIONS: -Dfile.encoding="UTF-8"
+      JAVA_HOME: "$SNAP/usr/lib/jvm/java-11-openjdk-$SNAPCRAFT_TARGET_ARCH"
+      XDG_DATA_HOME: "$SNAP/usr/share"
+      XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
+      PATH: "$JAVA_HOME/jre/bin:$PATH"
+      POKEMMO_NOVERIFY: '1'
+parts:
+  pokemmo:
+    plugin: gradle
+    source: https://github.com/kyu-n/pokemmo-unix-installer.git
+    source-type: git
+    gradle-output-dir: build/libs
+    gradle-openjdk-version: '11'
+    gradle-options: [distJar]
+    stage-packages:
+      - openjdk-11-jre
+      - libcanberra-gtk3-module
+  cleanup:
+    after: [pokemmo]  # Make this part run last; list all your other parts here
+    plugin: nil
+    build-snaps: [core18, gnome-3-34-1804]  # List all content-snaps you're using here
+    override-prime: |
+      set -eux
+      for snap in "core18" "gnome-3-28-1804"; do
+        cd "/snap/$snap/current" && find . -type f,l -exec rm -f "$SNAPCRAFT_PRIME/{}" \;
+      done
+      for CRUFT in bug lintian man; do
+        rm -rf $SNAPCRAFT_PRIME/usr/share/$CRUFT
+      done
+      find $SNAPCRAFT_PRIME/usr/share/doc/ -type f -not -name 'copyright' -delete
+      find $SNAPCRAFT_PRIME/usr/share -type d -empty -delete
+      rm -f $SNAPCRAFT_PRIME/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libgio-2.0.so.0*
+      rm -f $SNAPCRAFT_PRIME/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libharfbuzz.so.0*
+      rm -f $SNAPCRAFT_PRIME/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/libglib-2.0.so.0*

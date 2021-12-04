@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core18
-version: '1.0d'
+version: '1.0e'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -14,9 +14,7 @@ description: |
 
 grade: devel
 confinement: strict
-architectures:
-  - build-on: amd64
-    run-on: [amd64, armhf, arm64]
+architectures: [amd64, armhf, arm64]
 
 apps:
   pokemmo:

@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.1b'
+version: '1.1c'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -12,7 +12,7 @@ description: |
   This game requires a constant internet connection. Usage of this program requires an account
   with https://pokemmo.eu/ and requires you to accept the PokeMMO Terms of Service at login
 
-grade: devel
+grade: stable
 confinement: strict
 
 architectures:
@@ -48,6 +48,7 @@ apps:
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       PATH: "$JAVA_HOME/bin/:$PATH"
+      DISPLAY: "$DISPLAY"
 parts:
   gradle:
     plugin: nil
@@ -61,7 +62,7 @@ parts:
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
     override-pull: |
-      snapcraftctl pull && mv $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
+      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-build: |
       set -x
@@ -73,6 +74,8 @@ parts:
       esac
     stage-packages:
       - libglu1-mesa
+      - zenity
+      - x11-utils
       - bellsoft-java11-runtime
     build-packages:
       - bellsoft-java11

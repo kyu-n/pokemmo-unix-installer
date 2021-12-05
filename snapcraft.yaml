@@ -41,8 +41,6 @@ apps:
       - wayland
       - x11
       - unity7
-      - hardware-observe
-      - system-observe
     environment:
       JAVA_HOME: "$SNAP/usr/lib/jvm/bellsoft-java11-runtime-$SNAPCRAFT_TARGET_ARCH"
       _JAVA_OPTIONS: -Dfile.encoding="UTF-8"

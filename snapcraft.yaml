@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.1a'
+version: '1.1b'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -14,6 +14,7 @@ description: |
 
 grade: devel
 confinement: strict
+
 architectures:
   - build-on: arm64
   - build-on: armhf
@@ -28,7 +29,7 @@ package-repositories:
 
 apps:
   pokemmo:
-    command: usr/lib/jvm/bellsoft-java11-runtime-$SNAPCRAFT_TARGET_ARCH/bin/java -jar $SNAP/jar/unix-installer.jar
+    command: java -jar $SNAP/jar/unix-installer.jar
     extensions: [gnome-3-38]
     plugs:
       - network
@@ -51,7 +52,7 @@ parts:
   gradle:
     plugin: nil
     override-pull: |
-      curl -L https://services.gradle.org/distributions/gradle-7.3.1-bin.zip -o gradle-7.3.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.3.1-bin.zip $SNAPCRAFT_STAGE
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.3.1-bin.zip -o gradle-7.3.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.3.1-bin.zip $SNAPCRAFT_STAGE
     build-packages:
       - curl
   pokemmo:
@@ -63,7 +64,13 @@ parts:
       snapcraftctl pull && mv $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-build: |
-      ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar
+      set -x
+      ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
+      case "$SNAPCRAFT_TARGET_ARCH" in
+        amd64) ln -s usr/lib/jvm/bellsoft-java11-runtime-amd64/bin/java $SNAPCRAFT_PRIME/java ;;
+        arm64) ln -s usr/lib/jvm/bellsoft-java11-runtime-aarch64/bin/java $SNAPCRAFT_PRIME/java ;;
+        armhf) ln -s usr/lib/jvm/bellsoft-java11-runtime-arm32-vfp-hflt/bin/java $SNAPCRAFT_PRIME/java ;;
+      esac
     stage-packages:
       - libglu1-mesa
       - bellsoft-java11-runtime

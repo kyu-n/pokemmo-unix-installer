@@ -50,11 +50,20 @@ apps:
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       PATH: "$JAVA_HOME/bin/:$PATH"
 parts:
+  gradle:
+    plugin: nil
+    override-pull: |
+      curl -L https://services.gradle.org/distributions/gradle-7.3.1-bin.zip -o gradle-7.3.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.3.1-bin.zip $SNAPCRAFT_STAGE
+    build-packages:
+      - curl
   pokemmo:
+    after: [gradle]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
-    # For some reason, this stage will terminate prematurely unless the commands are chained..?
+    override-pull: |
+      snapcraftctl pull && mv $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
+    # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-build: |
       ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar
     stage-packages:

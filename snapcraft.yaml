@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.1c'
+version: '1.1d'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |

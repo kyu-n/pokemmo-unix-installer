@@ -12,13 +12,13 @@ import java.util.stream.Stream;
 public enum PokeMMOLocale
 {
 	en("English", "en", true),
-	fr("Français", "fr", false),
+	fr("Français", "fr", true),
 	es("Español", "es", true),
 	de("Deutsche", "de", false),
 	it("Italiano", "it", false),
 	pt_br("Português (Brasileiro)", "pt-BR", true),
 	ko("한국어", "ko", false),
-	ja("日本語", "ja", false),
+	ja("日本語", "ja", true),
 	zh("中国人", "zh", true),
 	zh_tw("中國人", "zh-TW", true);
 	

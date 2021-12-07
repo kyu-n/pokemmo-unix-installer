@@ -1,5 +1,6 @@
 package com.pokeemu.unix.util;
 
+import java.awt.*;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -10,6 +11,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
@@ -19,6 +22,7 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
+import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.ui.MainFrame;
 
 /**
@@ -28,6 +32,88 @@ import com.pokeemu.unix.ui.MainFrame;
  */
 public class Util
 {
+	private static boolean desktopBrowseSupported, desktopOpenSupported;
+
+	static
+	{
+		desktopBrowseSupported = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE);
+		desktopOpenSupported = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN);
+	}
+
+	public static void open(String file)
+	{
+		open(new File(file));
+	}
+
+	public static void open(File file)
+	{
+		if(file == null)
+			throw new IllegalArgumentException("File may not be null");
+
+		new Thread(() ->
+		{
+			if(desktopOpenSupported)
+			{
+				try
+				{
+					Desktop.getDesktop().open(file);
+					return;
+				} catch (IOException ex)
+				{
+					System.out.println("Failed to open Desktop#open " + file.getAbsolutePath());
+					ex.printStackTrace();
+					MainFrame.getInstance().showError(Config.getString("error.cant_open_client_folder"), Config.getString("error.io_exception"));
+				}
+			}
+
+			doXdgOpen(file.getAbsolutePath());
+
+		}).start();
+	}
+
+	public static void browse(String url)
+	{
+		if(url == null || url.isEmpty())
+			throw new IllegalArgumentException("Malformed URL " + url);
+
+		new Thread(() ->
+		{
+			if(desktopBrowseSupported)
+			{
+				try
+				{
+					Desktop.getDesktop().browse(new URI(url));
+					return;
+				}
+				catch (IOException | URISyntaxException ex)
+				{
+					System.out.println("Failed to open Desktop#browse " + url);
+					ex.printStackTrace();
+				}
+			}
+
+			doXdgOpen(url);
+
+		}).start();
+	}
+
+	private static void doXdgOpen(String url)
+	{
+		ProcessBuilder pb = new ProcessBuilder();
+		pb.inheritIO();
+		pb.command("xdg-open", url);
+
+		try
+		{
+			pb.start();
+		}
+		catch (IOException ex)
+		{
+			System.out.println("Failed to start xdg-open");
+			ex.printStackTrace();
+		}
+	}
+
 	public static byte[] getBytes(InputStream is) throws IOException {
 
 	    int len;

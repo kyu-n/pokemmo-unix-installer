@@ -5,6 +5,7 @@ import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
+import com.pokeemu.unix.util.Util;
 
 import javax.swing.*;
 import javax.swing.text.DefaultCaret;
@@ -181,18 +182,7 @@ public class MainFrame extends JFrame implements ActionListener
 	        	config_panel.add(aesWorkaroundCb);
 	        	
 	        	LocaleAwareButton openClientFolder = new LocaleAwareButton("config.title.open_client_folder");
-	        	openClientFolder.addActionListener((event) ->
-	        	{
-	        		try
-	        		{
-						Desktop.getDesktop().open(parent.getPokemmoDir());
-					}
-	        		catch (Exception e)
-	        		{
-						e.printStackTrace();
-						showError(Config.getString("error.cant_open_client_folder"), Config.getString("error.io_exception"));
-					}
-	        	});
+	        	openClientFolder.addActionListener((event) -> Util.open(parent.getPokemmoDir()));
 	        	
 	        	config_panel.add(openClientFolder);
 	        	config_panel.add(new Label("")); // Dummy widget to fulfill our column requirements

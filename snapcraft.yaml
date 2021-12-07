@@ -21,6 +21,9 @@ architectures:
   - build-on: armhf
   - build-on: amd64
 
+assumes:
+  - snapd2.43
+
 package-repositories:
   - type: apt
     components: [main]

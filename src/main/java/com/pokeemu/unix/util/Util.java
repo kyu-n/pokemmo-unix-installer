@@ -62,7 +62,6 @@ public class Util
 				{
 					System.out.println("Failed to open Desktop#open " + file.getAbsolutePath());
 					ex.printStackTrace();
-					MainFrame.getInstance().showError(Config.getString("error.cant_open_client_folder"), Config.getString("error.io_exception"));
 				}
 			}
 
@@ -111,6 +110,7 @@ public class Util
 		{
 			System.out.println("Failed to start xdg-open");
 			ex.printStackTrace();
+			MainFrame.getInstance().showError(Config.getString("error.cant_open_client_folder"), Config.getString("error.io_exception"));
 		}
 	}
 

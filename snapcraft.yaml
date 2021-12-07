@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.1f'
+version: '1.2a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -49,7 +49,6 @@ apps:
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       PATH: "$JAVA_HOME/bin/:$PATH"
-      DISPLAY: "$DISPLAY"
 parts:
   gradle:
     plugin: nil
@@ -69,14 +68,12 @@ parts:
       set -x
       ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
       case "$SNAPCRAFT_TARGET_ARCH" in
-        amd64) ln -s usr/lib/jvm/bellsoft-java11-runtime-amd64/bin/java $SNAPCRAFT_PRIME/java ;;
-        arm64) ln -s usr/lib/jvm/bellsoft-java11-runtime-aarch64/bin/java $SNAPCRAFT_PRIME/java ;;
-        armhf) ln -s usr/lib/jvm/bellsoft-java11-runtime-arm32-vfp-hflt/bin/java $SNAPCRAFT_PRIME/java ;;
+        amd64) ln -sf usr/lib/jvm/bellsoft-java11-runtime-amd64/bin/java $SNAPCRAFT_PRIME/java ;;
+        arm64) ln -sf usr/lib/jvm/bellsoft-java11-runtime-aarch64/bin/java $SNAPCRAFT_PRIME/java ;;
+        armhf) ln -sf usr/lib/jvm/bellsoft-java11-runtime-arm32-vfp-hflt/bin/java $SNAPCRAFT_PRIME/java ;;
       esac
     stage-packages:
       - libglu1-mesa
-      - zenity
-      - x11-utils
       - bellsoft-java11-runtime
     build-packages:
       - bellsoft-java11

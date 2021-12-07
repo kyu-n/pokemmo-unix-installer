@@ -118,7 +118,7 @@ public class UnixInstaller
 			return;
 		}
 
-//		checkForRunning();
+		checkForRunning();
 		downloadFeeds();
 		
 		File pokemmo_directory = new File(pokemmoDir);

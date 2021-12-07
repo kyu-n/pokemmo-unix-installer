@@ -49,6 +49,7 @@ apps:
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       PATH: "$JAVA_HOME/bin/:$PATH"
+      POKEMMO_IS_SNAPPED: '1'
 parts:
   gradle:
     plugin: nil

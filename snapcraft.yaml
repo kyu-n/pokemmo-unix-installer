@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.2a'
+version: '1.2b'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -52,6 +52,7 @@ apps:
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       PATH: "$JAVA_HOME/bin/:$PATH"
+      GTK_USE_PORTAL: '1'
       POKEMMO_IS_SNAPPED: '1'
 parts:
   gradle:
@@ -79,5 +80,6 @@ parts:
     stage-packages:
       - libglu1-mesa
       - bellsoft-java11-runtime
+      - yad
     build-packages:
       - bellsoft-java11

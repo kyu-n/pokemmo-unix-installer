@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.2b'
+version: '1.2c'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -46,6 +46,7 @@ apps:
       - wayland
       - x11
       - unity7
+      - removable-media
     environment:
       JAVA_HOME: "$SNAP/usr/lib/jvm/bellsoft-java11-runtime-$SNAPCRAFT_TARGET_ARCH"
       _JAVA_OPTIONS: -Dfile.encoding="UTF-8"

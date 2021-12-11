@@ -17,17 +17,33 @@ compileJava {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(11)
+        languageVersion = JavaLanguageVersion.of(17)
     }
-}
-
-dependencies {
-    //NONE
 }
 
 project.ext.appName = "PokeMMO"
 project.ext.mainClassName = "com.pokeemu.unix.UnixInstaller"
 project.ext.mainJar = "unix-installer.jar"
+
+jar {
+  archiveFileName = project.mainJar
+
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+  manifest {
+    attributes(
+      'Main-Class': project.mainClassName
+    )
+  }
+}
+
+task dist(type: GradleBuild) {
+    buildName "dist"
+    startParameter.projectProperties = gradle.startParameter.projectProperties
+    tasks = ['clean', 'createRuntime', 'jar']
+}
+
+assemble.dependsOn dist
 
 task getDeps(type: Copy) {
     from sourceSets.main.runtimeClasspath
@@ -43,23 +59,24 @@ task getDeps(type: Copy) {
     }
 }
 
+// creates a slim JDK runtime for distribution
+task createRuntime(type: Exec) {
+    doFirst() {
+        project.delete("${buildDir}/runtime")
+    }
 
-jar {
-  archiveFileName = project.mainJar
+    String runtimePath = "${buildDir}/runtime"
+    String jlinkPath = "$System.env.JRE_TARGET"+"/bin/jlink"
 
-  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-  manifest {
-    attributes(
-      'Main-Class': project.mainClassName
-    )
-  }
+    workingDir project.projectDir
+    commandLine = [
+            jlinkPath,
+            '--add-modules', 'java.se,java.base,java.desktop,jdk.unsupported,jdk.crypto.ec',
+            '--strip-debug',
+            '--no-header-files',
+            '--no-man-pages',
+            "--vm=server",
+            "--compress=2",
+            '--output', runtimePath
+    ]
 }
-
-task distJar(type: GradleBuild) {
-    buildName "distJar"
-    startParameter.projectProperties = gradle.startParameter.projectProperties
-    tasks = ['clean', 'jar']
-}
-
-assemble.dependsOn distJar

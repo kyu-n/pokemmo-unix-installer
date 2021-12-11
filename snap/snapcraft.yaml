@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.2c'
+version: '1.3a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -33,7 +33,7 @@ package-repositories:
 
 apps:
   pokemmo:
-    command: java -jar $SNAP/jar/unix-installer.jar
+    command: runtime/bin/java -jar $SNAP/jar/unix-installer.jar
     extensions: [gnome-3-38]
     plugs:
       - network
@@ -48,39 +48,36 @@ apps:
       - unity7
       - removable-media
     environment:
-      JAVA_HOME: "$SNAP/usr/lib/jvm/bellsoft-java11-runtime-$SNAPCRAFT_TARGET_ARCH"
+      JAVA_HOME: "$SNAP/jre"
+      PATH: "$JAVA_HOME/bin/:$PATH"
       _JAVA_OPTIONS: -Dfile.encoding="UTF-8"
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
-      PATH: "$JAVA_HOME/bin/:$PATH"
       GTK_USE_PORTAL: '1'
       POKEMMO_IS_SNAPPED: '1'
 parts:
-  gradle:
-    plugin: nil
-    override-pull: |
-      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.3.1-bin.zip -o gradle-7.3.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.3.1-bin.zip $SNAPCRAFT_STAGE
-    build-packages:
-      - curl
   pokemmo:
-    after: [gradle]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
-    override-pull: |
-      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
+    source-branch: snap2
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
+    override-pull: |
+      snapcraftctl pull && \
+      ./gradlew getDeps
     override-build: |
       set -x
-      ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
       case "$SNAPCRAFT_TARGET_ARCH" in
-        amd64) ln -sf usr/lib/jvm/bellsoft-java11-runtime-amd64/bin/java $SNAPCRAFT_PRIME/java ;;
-        arm64) ln -sf usr/lib/jvm/bellsoft-java11-runtime-aarch64/bin/java $SNAPCRAFT_PRIME/java ;;
-        armhf) ln -sf usr/lib/jvm/bellsoft-java11-runtime-arm32-vfp-hflt/bin/java $SNAPCRAFT_PRIME/java ;;
-      esac
+        amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java11-amd64" ;;
+        arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java11-aarch64" ;;
+        armhf) export JRE_TARGET="/usr/lib/jvm/bellsoft-java11-arm32-vfp-hflt" ;;
+      esac && \
+      ./gradlew assemble && \
+      mkdir $SNAPCRAFT_PART_INSTALL/jar && \
+      cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
+      mv build/runtime $SNAPCRAFT_PART_INSTALL
     stage-packages:
       - libglu1-mesa
-      - bellsoft-java11-runtime
       - yad
     build-packages:
       - bellsoft-java11

@@ -1,14 +1,15 @@
-buildscript {
-    repositories {
-        mavenLocal()
-        mavenCentral()
-        google()
-    }
+repositories {
+    mavenCentral()
+    google()
 }
 
 apply plugin: "java-library"
 apply plugin: "eclipse"
 apply plugin: "idea"
+
+dependencies {
+    implementation 'com.formdev:flatlaf:1.6.5'
+}
 
 compileJava {
     options.release = 11
@@ -20,15 +21,9 @@ java {
     }
 }
 
-dependencies {
-    //NONE
-}
-
 project.ext.appName = "PokeMMO"
 project.ext.mainClassName = "com.pokeemu.unix.UnixInstaller"
 project.ext.mainJar = "unix-installer.jar"
-
-def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
 
 jar {
   archiveFileName = project.mainJar
@@ -42,10 +37,46 @@ jar {
   }
 }
 
-task distJar(type: GradleBuild) {
-    buildName "distJar"
+task dist(type: GradleBuild) {
+    buildName "dist"
     startParameter.projectProperties = gradle.startParameter.projectProperties
-    tasks = ['clean', 'jar']
+    tasks = ['clean', 'createRuntime', 'jar']
 }
 
-assemble.dependsOn distJar
+assemble.dependsOn dist
+
+task getDeps(type: Copy) {
+    from sourceSets.main.runtimeClasspath
+    into 'runtime/'
+
+    doFirst {
+        ant.delete(dir: 'runtime')
+        ant.mkdir(dir: 'runtime')
+    }
+
+    doLast {
+        ant.delete(dir: 'runtime')
+    }
+}
+
+// creates a slim JDK runtime for distribution
+task createRuntime(type: Exec) {
+    doFirst() {
+        project.delete("${buildDir}/runtime")
+    }
+
+    String runtimePath = "${buildDir}/runtime"
+    String jlinkPath = "$System.env.JRE_TARGET"+"/bin/jlink"
+
+    workingDir project.projectDir
+    commandLine = [
+            jlinkPath,
+            '--add-modules', 'java.se,java.base,java.desktop,jdk.unsupported,jdk.crypto.ec',
+            '--strip-debug',
+            '--no-header-files',
+            '--no-man-pages',
+            "--vm=server",
+            "--compress=2",
+            '--output', runtimePath
+    ]
+}

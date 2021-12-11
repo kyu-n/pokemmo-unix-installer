@@ -1,14 +1,15 @@
-buildscript {
-    repositories {
-        mavenLocal()
-        mavenCentral()
-        google()
-    }
+repositories {
+    mavenCentral()
+    google()
 }
 
 apply plugin: "java-library"
 apply plugin: "eclipse"
 apply plugin: "idea"
+
+dependencies {
+    implementation 'com.formdev:flatlaf:1.6.5'
+}
 
 compileJava {
     options.release = 11
@@ -28,7 +29,20 @@ project.ext.appName = "PokeMMO"
 project.ext.mainClassName = "com.pokeemu.unix.UnixInstaller"
 project.ext.mainJar = "unix-installer.jar"
 
-def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+task getDeps(type: Copy) {
+    from sourceSets.main.runtimeClasspath
+    into 'runtime/'
+
+    doFirst {
+        ant.delete(dir: 'runtime')
+        ant.mkdir(dir: 'runtime')
+    }
+
+    doLast {
+        ant.delete(dir: 'runtime')
+    }
+}
+
 
 jar {
   archiveFileName = project.mainJar

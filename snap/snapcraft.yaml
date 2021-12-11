@@ -56,23 +56,20 @@ apps:
       GTK_USE_PORTAL: '1'
       POKEMMO_IS_SNAPPED: '1'
 parts:
-  gradle:
-    plugin: nil
-    override-pull: |
-      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.3.1-bin.zip -o gradle-7.3.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.3.1-bin.zip $SNAPCRAFT_STAGE
-    build-packages:
-      - curl
   pokemmo:
-    after: [gradle]
     plugin: dump
-    source: https://github.com/kyu-n/pokemmo-unix-installer.git
+    source: .
     source-type: git
-    override-pull: |
-      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
+    source-branch: snap2
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
+    override-pull: |
+      snapcraftctl pull && \
+      ./gradlew getDeps
     override-build: |
       set -x
-      ./gradlew distJar && mkdir $SNAPCRAFT_PART_INSTALL/jar && cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
+      ./gradlew distJar && \
+      mkdir $SNAPCRAFT_PART_INSTALL/jar && \
+      cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
       case "$SNAPCRAFT_TARGET_ARCH" in
         amd64) ln -sf usr/lib/jvm/bellsoft-java11-runtime-amd64/bin/java $SNAPCRAFT_PRIME/java ;;
         arm64) ln -sf usr/lib/jvm/bellsoft-java11-runtime-aarch64/bin/java $SNAPCRAFT_PRIME/java ;;
@@ -80,7 +77,7 @@ parts:
       esac
     stage-packages:
       - libglu1-mesa
-      - bellsoft-java11-runtime
       - yad
     build-packages:
-      - bellsoft-java11
+      - bellsoft-java17
+      - curl

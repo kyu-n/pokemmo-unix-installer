@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core20
-version: '1.2c'
+version: '1.3a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 description: |
@@ -80,6 +80,4 @@ parts:
       - libglu1-mesa
       - yad
     build-packages:
-      - bellsoft-java17
       - bellsoft-java11
-      - curl

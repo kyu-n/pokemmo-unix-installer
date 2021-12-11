@@ -58,7 +58,7 @@ apps:
 parts:
   pokemmo:
     plugin: dump
-    source: .
+    source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
     source-branch: snap2
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew

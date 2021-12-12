@@ -1,5 +1,6 @@
 package com.pokeemu.unix;
 
+import com.formdev.flatlaf.FlatIntelliJLaf;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.ui.MainFrame;
@@ -551,27 +552,10 @@ public class UnixInstaller
 	
 	public static void main(String[] args)
 	{
-		init();
-		
 		Config.load();
-		
-		try
-		{
-			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-		}
-		catch (Exception e)
-		{
-			e.printStackTrace();
-		}
-		
+		FlatIntelliJLaf.setup();
 		Runtime.getRuntime().addShutdownHook(new Thread(Config::save));
 		
 		new UnixInstaller().run();
-	}
-	
-	private static void init()
-	{
-		System.setProperty("awt.useSystemAAFontSettings","on");
-		System.setProperty("swing.aatext", "true");
 	}
 }

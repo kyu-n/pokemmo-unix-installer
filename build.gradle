@@ -7,6 +7,10 @@ apply plugin: "java-library"
 apply plugin: "eclipse"
 apply plugin: "idea"
 
+dependencies {
+    implementation files('libs/flatlaf-1.6.5.jar')
+}
+
 compileJava {
     options.release = 11
 }

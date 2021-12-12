@@ -57,8 +57,10 @@ jar {
       'Main-Class': project.mainClassName
     )
   }
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
+    }
 }
-
 task dist(type: GradleBuild) {
     buildName "dist"
     startParameter.projectProperties = gradle.startParameter.projectProperties

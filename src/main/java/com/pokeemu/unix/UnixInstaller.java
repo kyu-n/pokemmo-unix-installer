@@ -236,6 +236,7 @@ public class UnixInstaller
 
 		// Used by KDE to xdg-portal file dialogues, but we do not have a native file dialogue available at this time
 //		pb.environment().put("GTK_USE_PORTALS", "1");
+		pb.environment().put("POKEMMO_UNIX_LAUNCHER_VER", Integer.toString(INSTALLER_VERSION));
 
 		String snap_env = System.getenv("POKEMMO_IS_SNAPPED");
 		if(snap_env != null)

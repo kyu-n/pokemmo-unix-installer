@@ -17,12 +17,10 @@ This program is distributed WITHOUT ANY WARRANTY; without even the implied warra
 
 # Build
 
-This program is built with [[Gradle]](https://gradle.org/). We use a local copy of gradle-*-bin.zip due to Launchpad constraints. Download the correct binary version from https://gradle.org/releases/ and place it in the `gradle/wrapper` folder.
-
-Alternatively, automatic downloads can be enabled by setting `distributionUrl=https\://services.gradle.org/distributions/gradle-7.3.1-bin.zip` in your `gradle-wrapper.properties` file.
+This program is built with [[Gradle]](https://gradle.org/)
 
 To build:
-- `./gradlew distJar`
+- `./gradlew jar`
 
 To run:
 - `java -jar unix-installer.jar`

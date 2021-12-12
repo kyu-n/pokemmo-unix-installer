@@ -7,10 +7,6 @@ apply plugin: "java-library"
 apply plugin: "eclipse"
 apply plugin: "idea"
 
-dependencies {
-    implementation 'com.formdev:flatlaf:1.6.5'
-}
-
 compileJava {
     options.release = 11
 }
@@ -24,40 +20,6 @@ java {
 project.ext.appName = "PokeMMO"
 project.ext.mainClassName = "com.pokeemu.unix.UnixInstaller"
 project.ext.mainJar = "unix-installer.jar"
-
-jar {
-  archiveFileName = project.mainJar
-
-  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-  manifest {
-    attributes(
-      'Main-Class': project.mainClassName
-    )
-  }
-}
-
-task dist(type: GradleBuild) {
-    buildName "dist"
-    startParameter.projectProperties = gradle.startParameter.projectProperties
-    tasks = ['clean', 'createRuntime', 'jar']
-}
-
-assemble.dependsOn dist
-
-task getDeps(type: Copy) {
-    from sourceSets.main.runtimeClasspath
-    into 'runtime/'
-
-    doFirst {
-        ant.delete(dir: 'runtime')
-        ant.mkdir(dir: 'runtime')
-    }
-
-    doLast {
-        ant.delete(dir: 'runtime')
-    }
-}
 
 // creates a slim JDK runtime for distribution
 task createRuntime(type: Exec) {
@@ -80,3 +42,23 @@ task createRuntime(type: Exec) {
             '--output', runtimePath
     ]
 }
+
+jar {
+  archiveFileName = project.mainJar
+
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+  manifest {
+    attributes(
+      'Main-Class': project.mainClassName
+    )
+  }
+}
+
+task dist(type: GradleBuild) {
+    buildName "dist"
+    startParameter.projectProperties = gradle.startParameter.projectProperties
+    tasks = ['clean', 'createRuntime', 'jar']
+}
+
+assemble.dependsOn dist

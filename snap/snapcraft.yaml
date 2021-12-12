@@ -56,15 +56,20 @@ apps:
       GTK_USE_PORTAL: '1'
       POKEMMO_IS_SNAPPED: '1'
 parts:
+  gradle:
+    plugin: nil
+    override-pull: |
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.3.1-bin.zip -o gradle-7.3.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.3.1-bin.zip $SNAPCRAFT_STAGE
+    build-packages:
+      - curl
   pokemmo:
+    after: [gradle]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
-    source-branch: snap2
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |
-      snapcraftctl pull && \
-      ./gradlew getDeps
+      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.3.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.3.1-bin.zip
     override-build: |
       set -x
       case "$SNAPCRAFT_TARGET_ARCH" in
@@ -81,3 +86,4 @@ parts:
       - yad
     build-packages:
       - bellsoft-java11
+      - ca-certificates-java

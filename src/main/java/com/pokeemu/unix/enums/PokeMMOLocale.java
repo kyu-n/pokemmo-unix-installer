@@ -15,7 +15,7 @@ public enum PokeMMOLocale
 	fr("Français", "fr", true),
 	es("Español", "es", true),
 	de("Deutsche", "de", false),
-	it("Italiano", "it", false),
+	it("Italiano", "it", true),
 	pt_br("Português (Brasileiro)", "pt-BR", true),
 	ko("한국어", "ko", false),
 	ja("日本語", "ja", true),

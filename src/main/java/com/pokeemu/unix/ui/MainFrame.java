@@ -43,8 +43,6 @@ public class MainFrame extends JFrame implements ActionListener
 	
 	private static MainFrame instance;
 	
-	private int launchCountdown = 3;
-	
 	private JDialog configWindow;
 	
 	public static MainFrame getInstance()
@@ -345,7 +343,7 @@ public class MainFrame extends JFrame implements ActionListener
 		}
 	}
 	
-	public void setCanStart(boolean autostart)
+	public void setCanStart()
 	{
 		launchGame.setEnabled(true);
 		
@@ -358,26 +356,21 @@ public class MainFrame extends JFrame implements ActionListener
 				@Override
 				public void run()
 				{
-					launchGame.setTextKey("main.launch_countdown", launchCountdown--);
-					
-					if(launchCountdown < 1)
+					timer.cancel();
+
+					if(configWindow.isVisible())
 					{
-						timer.cancel();
-						
-						if(configWindow.isVisible())
-						{
-					    	launchGame.setTextKey("main.launch");
-					    	launchGame.addActionListener((event2) -> parent.launchGame());
-						}
-						else
-						{
-							parent.launchGame();
-						}
+						launchGame.setTextKey("main.launch");
+						launchGame.addActionListener((event2) -> parent.launchGame());
+					}
+					else
+					{
+						parent.launchGame();
 					}
 				}
 			};
 			
-		    timer.scheduleAtFixedRate(task, 0, 1000);
+		    timer.scheduleAtFixedRate(task, 1000, 1000);
 		    
 		    launchGame.addActionListener((event) ->
 		    {

@@ -184,7 +184,7 @@ public class UnixInstaller
 		mainFrame.showInfo("status.check_success");
 		mainFrame.setStatus("status.ready", 100);
 		
-		mainFrame.setCanStart(true);
+		mainFrame.setCanStart();
 	}
 	
 	public void launchGame()

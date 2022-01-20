@@ -370,7 +370,7 @@ public class MainFrame extends JFrame implements ActionListener
 				}
 			};
 			
-		    timer.scheduleAtFixedRate(task, 1000, 1000);
+		    timer.scheduleAtFixedRate(task, 500, 500);
 		    
 		    launchGame.addActionListener((event) ->
 		    {

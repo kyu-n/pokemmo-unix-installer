@@ -32,7 +32,7 @@ task createRuntime(type: Exec) {
     }
 
     String runtimePath = "${buildDir}/runtime"
-    String jlinkPath = "$System.env.JRE_TARGET"+"/bin/jlink"
+    String jlinkPath = "$System.env.JRE_TARGET" + "/bin/jlink"
 
     workingDir project.projectDir
     commandLine = [
@@ -48,15 +48,15 @@ task createRuntime(type: Exec) {
 }
 
 jar {
-  archiveFileName = project.mainJar
+    archiveFileName = project.mainJar
 
-  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-  manifest {
-    attributes(
-      'Main-Class': project.mainClassName
-    )
-  }
+    manifest {
+        attributes(
+                'Main-Class': project.mainClassName
+        )
+    }
     from {
         configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
     }

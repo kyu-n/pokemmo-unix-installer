@@ -1,8 +1,8 @@
 package com.pokeemu.unix.ui;
 
-import javax.swing.JCheckBox;
-
 import com.pokeemu.unix.config.Config;
+
+import javax.swing.*;
 
 /**
  * @author Kyu
@@ -10,14 +10,14 @@ import com.pokeemu.unix.config.Config;
 public class LocaleAwareCheckbox extends JCheckBox implements LocaleAwareInterface
 {
 	private String tooltip;
-	
+
 	public LocaleAwareCheckbox()
 	{
 		this.tooltip = "";
-		
+
 		LocaleAwareElementManager.instance.addElement(this);
 	}
-	
+
 	@Override
 	public void setTextKey(String key, Object... params)
 	{
@@ -30,14 +30,14 @@ public class LocaleAwareCheckbox extends JCheckBox implements LocaleAwareInterfa
 		this.tooltip = tooltip;
 		super.setToolTipText(Config.getString(tooltip, params));
 	}
-	
+
 	@Override
 	public void setToolTipText(String text)
 	{
 		throw new UnsupportedOperationException("Must use locale-aware method to set tooltips");
 	}
-	
-	
+
+
 	@Override
 	public void updateLocale()
 	{

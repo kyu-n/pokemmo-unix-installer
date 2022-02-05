@@ -8,9 +8,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 
 /**
- * 
  * @author Desu <desu@pokemmo.eu>
- *
  */
 public class CryptoUtil
 {
@@ -20,36 +18,36 @@ public class CryptoUtil
 	{
 		return feeds_public_key;
 	}
-	
+
 	public static boolean verifySignature(byte[] raw, byte[] signature, PublicKey key, String sig_format)
 	{
 		try
 		{
 			Signature sig2 = Signature.getInstance(sig_format);
-	    	sig2.initVerify(key);
-	    	sig2.update(raw);
-	    	return sig2.verify(signature);
+			sig2.initVerify(key);
+			sig2.update(raw);
+			return sig2.verify(signature);
 		}
 		catch(Exception e)
 		{
-			System.out.println("Exception verifying " + sig_format+ " signature.");
+			System.out.println("Exception verifying " + sig_format + " signature.");
 			e.printStackTrace();
 		}
-    	
-    	return false;
+
+		return false;
 	}
-	
+
 	private static PublicKey getPublicKey(byte[] encoded)
 	{
 		X509EncodedKeySpec keySpec = new X509EncodedKeySpec(encoded);
-        try
-        {
+		try
+		{
 			return KeyFactory.getInstance("RSA").generatePublic(keySpec);
-        }
-        catch(NoSuchAlgorithmException | InvalidKeySpecException e)
-        {
-        	e.printStackTrace();
-        }
+		}
+		catch(NoSuchAlgorithmException | InvalidKeySpecException e)
+		{
+			e.printStackTrace();
+		}
 
 		return null;
 	}

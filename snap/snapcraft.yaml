@@ -26,15 +26,15 @@ assumes:
 
 package-repositories:
   - type: apt
-    components: [main]
-    suites: [stable]
+    components: [ main ]
+    suites: [ stable ]
     key-id: 99A5C88E3C5B1FA8B05A19D332E9750179FCEA62
     url: https://apt.bell-sw.com/
 
 apps:
   pokemmo:
     command: runtime/bin/java -jar $SNAP/jar/unix-installer.jar
-    extensions: [gnome-3-38]
+    extensions: [ gnome-3-38 ]
     plugs:
       - network
       - opengl
@@ -63,7 +63,7 @@ parts:
     build-packages:
       - curl
   pokemmo:
-    after: [gradle]
+    after: [ gradle ]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git

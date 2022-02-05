@@ -19,6 +19,7 @@ nbproject
 #gradle
 .gradle
 /local.properties
+/gradle/wrapper/*.zip
 
 #build/runtime artifacts
 build

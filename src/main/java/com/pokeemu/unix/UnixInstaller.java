@@ -10,6 +10,7 @@ import com.pokeemu.unix.updater.UpdateFile;
 import com.pokeemu.unix.util.Util;
 
 import javax.swing.*;
+import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -84,14 +85,16 @@ public class UnixInstaller
 	
 	private void run()
 	{
+		String fileSeparator = File.separator;
+
 		String user_home = System.getProperty("user.home");
 		String pokemmo_data_home = System.getenv("SNAP_USER_COMMON");
 		if(pokemmo_data_home == null)
-			pokemmo_data_home = Objects.requireNonNullElse(System.getenv("XDG_DATA_HOME"), user_home+"/.local/share");
+			pokemmo_data_home = Objects.requireNonNullElse(System.getenv("XDG_DATA_HOME"), user_home+fileSeparator+".local"+fileSeparator+"share");
 
-		pokemmoDir = pokemmo_data_home+"/pokemmo-client-"+Config.UPDATE_CHANNEL.toString()+"/";
+		pokemmoDir = pokemmo_data_home+fileSeparator+"pokemmo-client-"+Config.UPDATE_CHANNEL.toString()+fileSeparator;
 
-		jrePath = System.getProperty("java.home")+"/bin/java";
+		jrePath = System.getProperty("java.home")+fileSeparator+"bin"+fileSeparator+"java";
 		mainFrame = new MainFrame(this);
 
 		String version = System.getProperty("java.specification.version");
@@ -113,13 +116,13 @@ public class UnixInstaller
 			}
 		}
 
-		if(majorver > 16 || majorver < 11)
+		if(majorver != 11 && majorver != 17)
 		{
 			mainFrame.showError(Config.getString("error.incompatible_jvm", Config.getString("status.title.failed_startup")), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
 			return;
 		}
 
-		checkForRunning();
+//		checkForRunning();
 		downloadFeeds();
 		
 		File pokemmo_directory = new File(pokemmoDir);
@@ -555,7 +558,8 @@ public class UnixInstaller
 		Config.load();
 		FlatIntelliJLaf.setup();
 		Runtime.getRuntime().addShutdownHook(new Thread(Config::save));
-		
+		UIManager.getLookAndFeelDefaults().put("defaultFont", new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
 		new UnixInstaller().run();
 	}
 }

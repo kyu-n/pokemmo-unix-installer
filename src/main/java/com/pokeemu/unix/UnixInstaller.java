@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
 import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.FlatSystemProperties;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.ui.MainFrame;
@@ -634,8 +635,11 @@ public class UnixInstaller
 
 	public static void main(String[] args)
 	{
+		System.setProperty("flatlaf.useUbuntuFont", "true");
+
 		Config.load();
 		FlatLightLaf.setup();
+
 		Runtime.getRuntime().addShutdownHook(new Thread(Config::save));
 		UIManager.getLookAndFeelDefaults().put("defaultFont", new Font(Font.SANS_SERIF, Font.PLAIN, 14));
 

@@ -22,6 +22,7 @@ import com.pokeemu.unix.ui.MainFrame;
 import com.pokeemu.unix.updater.MainFeed;
 import com.pokeemu.unix.updater.UpdateFeed;
 import com.pokeemu.unix.updater.UpdateFile;
+import com.pokeemu.unix.updater.UpdaterSwingWorker;
 import com.pokeemu.unix.util.Util;
 
 import javax.swing.*;
@@ -82,6 +83,8 @@ public class UnixInstaller
 	private boolean firstRun = false;
 
 	private boolean isLaunching = false;
+	private boolean isUpdating = false;
+
 
 	private void run()
 	{
@@ -133,6 +136,7 @@ public class UnixInstaller
 			if(!pokemmo_directory.mkdirs() && !pokemmo_directory.exists())
 			{
 				mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_1"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+				return;
 			}
 
 			firstRun = true;
@@ -141,11 +145,13 @@ public class UnixInstaller
 		if(!pokemmo_directory.isDirectory())
 		{
 			mainFrame.showError(Config.getString("error.dir_not_dir", pokemmoDir, "DIR_5"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+			return;
 		}
 
 		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
 		{
 			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+			return;
 		}
 
 		if(firstRun)
@@ -170,7 +176,7 @@ public class UnixInstaller
 				}
 			}
 
-			doUpdate(false);
+			new UpdaterSwingWorker(this, mainFrame, false).execute();
 		}
 		else if(!isPokemmoValid())
 		{
@@ -188,12 +194,14 @@ public class UnixInstaller
 				}
 			}
 
-			// If our declared revision is invalid, or we have already received this update, we must repair
-			doUpdate(revision <= 0 || (MainFeed.MIN_REVISION > 0 && revision >= MainFeed.MIN_REVISION));
+			// If our declared revision is invalid, repair
+			new UpdaterSwingWorker(this, mainFrame, revision <= 0).execute();
 		}
-
-		mainFrame.showInfo("status.check_success");
-		mainFrame.setStatus("status.ready", 100);
+		else
+		{
+			mainFrame.showInfo("status.check_success");
+			mainFrame.setStatus("status.ready", 100);
+		}
 
 		mainFrame.setCanStart();
 	}
@@ -322,7 +330,7 @@ public class UnixInstaller
 
 		if(destroyables.size() > 0)
 		{
-			if(mainFrame.showYesNo(Config.getString("status.game_already_running"), "") == JOptionPane.YES_OPTION)
+			if(mainFrame.showYesNoDialogue(Config.getString("status.game_already_running"), ""))
 			{
 				for(ProcessHandle p : destroyables)
 				{
@@ -382,8 +390,13 @@ public class UnixInstaller
 		return invalidFiles.size() < 1;
 	}
 
-	private void doUpdate(boolean repair)
+	public void doUpdate(boolean repair)
 	{
+		if(isUpdating)
+			return;
+
+		isUpdating = true;
+
 		if(repair)
 		{
 			mainFrame.setStatus("status.game_repair", 30);
@@ -425,6 +438,7 @@ public class UnixInstaller
 			if(!f.getParentFile().mkdirs() && !f.getParentFile().exists())
 			{
 				mainFrame.showError(Config.getString("error.dir_not_accessible", f.getParentFile(), "DIR_8"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+				return;
 			}
 
 			String hash_sha256 = Util.calculateHash("SHA-256", f);
@@ -447,6 +461,8 @@ public class UnixInstaller
 		if(to_download.size() < 1)
 		{
 			mainFrame.setStatus("status.game_verified", 90);
+			mainFrame.setStatus("status.ready", 100);
+			isUpdating = false;
 			return;
 		}
 
@@ -474,11 +490,18 @@ public class UnixInstaller
 		phaser.arriveAndAwaitAdvance();
 
 		if(repair)
-		{
 			clearCache();
-		}
 
 		networkExecutorService.shutdown();
+		isUpdating = false;
+
+		mainFrame.showInfo("status.check_success");
+		mainFrame.setStatus("status.ready", 100);
+	}
+
+	public boolean isUpdating()
+	{
+		return isUpdating;
 	}
 
 	private boolean downloadFile(UpdateFile file)

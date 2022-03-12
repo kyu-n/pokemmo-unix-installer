@@ -14,6 +14,7 @@ import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
+import com.pokeemu.unix.updater.UpdaterSwingWorker;
 import com.pokeemu.unix.util.Util;
 
 import javax.swing.*;
@@ -101,7 +102,7 @@ public class MainFrame extends JFrame implements ActionListener
 		 */
 		configWindow = new JDialog(this, Config.getString("config.title.window"), true);
 		{
-			JPanel config_panel = new JPanel(new GridLayout(9, 2));
+			JPanel config_panel = new JPanel(new GridLayout(10, 2));
 			config_panel.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
 			{
 				LocaleAwareLabel localeLabel = new LocaleAwareLabel("config.title.language");
@@ -200,6 +201,19 @@ public class MainFrame extends JFrame implements ActionListener
 
 				config_panel.add(openClientFolder);
 				config_panel.add(new Label("")); // Dummy widget to fulfill our column requirements
+
+				LocaleAwareButton repairClientFolder = new LocaleAwareButton("config.title.repair_client");
+				repairClientFolder.addActionListener((event) ->
+				{
+					if(showYesNoDialogue(Config.getString("status.game_repair_prompt"), Config.getString("config.title.repair_client")))
+					{
+						configWindow.setVisible(false);
+						new UpdaterSwingWorker(parent, MainFrame.this, true).execute();
+					}
+				});
+
+				config_panel.add(repairClientFolder);
+				config_panel.add(new Label("")); // Dummy widget to fulfill our column requirements
 			}
 
 			configWindow.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
@@ -216,7 +230,7 @@ public class MainFrame extends JFrame implements ActionListener
 		JPanel bottom_panel = new JPanel(new BorderLayout(0, 0));
 		{
 			configLauncher = new LocaleAwareButton("config.title.window");
-			configLauncher.addActionListener((event) -> SwingUtilities.invokeLater(() -> configWindow.setVisible(true)));
+			configLauncher.addActionListener((event) -> configWindow.setVisible(true));
 
 			launchGame = new LocaleAwareButton("main.launch");
 			launchGame.setEnabled(false);
@@ -252,16 +266,20 @@ public class MainFrame extends JFrame implements ActionListener
 
 	public void setStatus(final String string, int progress, Object... params)
 	{
-		EventQueue.invokeLater(() ->
-		{
+		if(!SwingUtilities.isEventDispatchThread())
+			SwingUtilities.invokeLater(() -> status.setTextKey(string));
+		else
 			status.setTextKey(string);
-			addDetail(string, progress, params);
-		});
+
+		addDetail(string, progress, params);
 	}
 
 	public void addDetail(final String string, final int progress, Object... params)
 	{
-		EventQueue.invokeLater(() -> addDetailPrivate(string, progress, params));
+		if(!SwingUtilities.isEventDispatchThread())
+			SwingUtilities.invokeLater(() -> addDetailPrivate(string, progress, params));
+		else
+			addDetailPrivate(string, progress, params);
 	}
 
 	protected void addDetailPrivate(String string, int progress, Object... params)
@@ -288,7 +306,10 @@ public class MainFrame extends JFrame implements ActionListener
 
 	public void updateDLSpeed(final long bytes_per_second)
 	{
-		EventQueue.invokeLater(() -> dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s"));
+		if(!SwingUtilities.isEventDispatchThread())
+			SwingUtilities.invokeLater(() -> dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s"));
+		else
+			dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s");
 	}
 
 	public static String humanReadableByteCount(long bytes, boolean si)
@@ -325,20 +346,16 @@ public class MainFrame extends JFrame implements ActionListener
 		addDetail(message, 90, params);
 	}
 
-	public int showYesNo(String message, String window_title)
+	public boolean showYesNoDialogue(String message, String window_title)
 	{
-		return JOptionPane.showConfirmDialog(this, message, window_title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+		return JOptionPane.showConfirmDialog(this, message, window_title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
 	}
 
 	public void showMessage(String message, String window_title, int information_code, Runnable runnable)
 	{
-		System.out.println(window_title + " - " + message);
 		JOptionPane.showMessageDialog(this, message, window_title, information_code);
-
 		if(runnable != null)
-		{
 			executorService.execute(runnable);
-		}
 	}
 
 	public void showDownloadProgress(int bytes)

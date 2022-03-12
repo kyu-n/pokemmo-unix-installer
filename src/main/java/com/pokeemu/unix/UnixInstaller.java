@@ -634,8 +634,6 @@ public class UnixInstaller
 
 	public static void main(String[] args)
 	{
-		System.setProperty("flatlaf.useUbuntuFont", "true");
-
 		Config.load();
 		FlatLightLaf.setup();
 

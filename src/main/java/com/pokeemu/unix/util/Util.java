@@ -30,7 +30,7 @@ import com.pokeemu.unix.ui.MainFrame;
  */
 public class Util
 {
-	private static boolean desktopBrowseSupported, desktopOpenSupported;
+	private static final boolean desktopBrowseSupported, desktopOpenSupported;
 
 	static
 	{
@@ -127,7 +127,6 @@ public class Util
 		{
 			size = is.available();
 			buf = new byte[size];
-			len = is.read(buf, 0, size);
 		}
 		else
 		{
@@ -260,9 +259,6 @@ public class Util
 
 	/**
 	 * Downloads and saves the requested URL to the requested filename
-	 *
-	 * @param raw_url
-	 * @return
 	 */
 	public static boolean downloadUrlToFile(String raw_url, File file)
 	{
@@ -305,7 +301,7 @@ public class Util
 			BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
 
 			byte[] data = new byte[1024];
-			int x = 0;
+			int x;
 			while((x = in.read(data, 0, 1024)) >= 0)
 			{
 				MainFrame.getInstance().showDownloadProgress(x);

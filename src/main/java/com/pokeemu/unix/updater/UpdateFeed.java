@@ -32,7 +32,7 @@ public class UpdateFeed
 	/**
 	 * List of files and their checksums.
 	 */
-	private List<UpdateFile> files = new ArrayList<>();
+	private final List<UpdateFile> files = new ArrayList<>();
 	public boolean SUCCESSFUL = false;
 
 	public UpdateFeed(MainFrame mainFrame)

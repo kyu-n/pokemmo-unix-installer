@@ -124,7 +124,7 @@ public class UnixInstaller
 			return;
 		}
 
-//		checkForRunning();
+		checkForRunning();
 		downloadFeeds();
 
 		File pokemmo_directory = new File(pokemmoDir);
@@ -460,7 +460,7 @@ public class UnixInstaller
 			{
 				mainFrame.addDetail("status.files.downloading", ((phaser.getArrivedParties() * 100) / to_download.size()), file.name);
 
-				if(downloadFile(updateFeed, file))
+				if(downloadFile(file))
 				{
 					phaser.arrive();
 				}
@@ -481,7 +481,7 @@ public class UnixInstaller
 		networkExecutorService.shutdown();
 	}
 
-	private boolean downloadFile(UpdateFeed update_feed, UpdateFile file)
+	private boolean downloadFile(UpdateFile file)
 	{
 		String checksum_sha256 = file.sha256;
 		for(int mirror_index = 0; mirror_index < MainFeed.DOWNLOAD_MIRRORS.length; mirror_index++)

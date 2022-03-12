@@ -34,8 +34,8 @@ public class MainFrame extends JFrame implements ActionListener
 	protected LocaleAwareButton launchGame;
 	protected LocaleAwareButton configLauncher;
 
-	private JProgressBar progressBar;
-	private LocaleAwareTextArea taskOutput;
+	private final JProgressBar progressBar;
+	private final LocaleAwareTextArea taskOutput;
 
 	private final ExecutorService executorService;
 
@@ -44,7 +44,7 @@ public class MainFrame extends JFrame implements ActionListener
 
 	private static MainFrame instance;
 
-	private JDialog configWindow;
+	private final JDialog configWindow;
 
 	public static MainFrame getInstance()
 	{

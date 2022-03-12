@@ -20,7 +20,7 @@ public class LocaleAwareLabel extends Label implements LocaleAwareInterface
 	{
 		this.key = key;
 		super.setText(Config.getString(key));
-		setAlignment(Label.LEFT);
+		setAlignment(alignment);
 
 		LocaleAwareElementManager.instance.addElement(this);
 	}

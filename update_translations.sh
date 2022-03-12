@@ -12,9 +12,9 @@ cd src/main/resources/
 TL_LANGCODE=""
 OUTPUT_FILENAME=""
 
-for lang in zh fr de it ja ko ptbr es; do
+for lang in zh fr de it ja ko ptbr es fil; do
 	case $lang in
-		zh)	OUTPUT_FILENAME=MessagesBundle_zh.properties ; TL_LANGCODE=zh_Hans ;;
+		zh) OUTPUT_FILENAME=MessagesBundle_zh.properties ; TL_LANGCODE=zh_Hans ;;
 		fr) OUTPUT_FILENAME=MessagesBundle_fr.properties ; TL_LANGCODE=fr ;;
 		de) OUTPUT_FILENAME=MessagesBundle_de.properties ; TL_LANGCODE=de ;;
 		it) OUTPUT_FILENAME=MessagesBundle_it.properties ; TL_LANGCODE=it ;;
@@ -22,6 +22,7 @@ for lang in zh fr de it ja ko ptbr es; do
 		ko) OUTPUT_FILENAME=MessagesBundle_ko.properties ; TL_LANGCODE=ko ;;
 		ptbr) OUTPUT_FILENAME=MessagesBundle_pt_BR.properties ; TL_LANGCODE=pt_BR ;;
 		es) OUTPUT_FILENAME=MessagesBundle_es.properties ; TL_LANGCODE=es ;;
+		fil) OUTPUT_FILENAME=MessagesBundle_fil.properties ; TL_LANGCODE=fil ;;
 	esac
 	
 	curl -H "Authorization: Token $TL_APIKEY" https://translate.pokemmo.eu/api/translations/client/unix-installer/$TL_LANGCODE/file/ -o $OUTPUT_FILENAME

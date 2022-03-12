@@ -14,13 +14,14 @@ public enum PokeMMOLocale
 	en("English", "en", true),
 	fr("Français", "fr", true),
 	es("Español", "es", true),
-	de("Deutsche", "de", false),
+	de("Deutsche", "de", true),
 	it("Italiano", "it", true),
 	pt_br("Português (Brasileiro)", "pt-BR", true),
-	ko("한국어", "ko", false),
+	ko("한국어", "ko", true),
 	ja("日本語", "ja", true),
 	zh("中国人", "zh", true),
-	zh_tw("中國人", "zh-TW", true);
+	zh_tw("中國人", "zh-TW", true),
+	fil("Filipino", "fil", true);
 
 	private final String display_name, lang_tag;
 	private final boolean language_is_selectable;

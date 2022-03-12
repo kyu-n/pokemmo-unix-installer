@@ -8,7 +8,7 @@ apply plugin: "eclipse"
 apply plugin: "idea"
 
 dependencies {
-    implementation files('libs/flatlaf-1.6.5.jar')
+    implementation files('libs/flatlaf-2.0.2.jar')
 }
 
 compileJava {

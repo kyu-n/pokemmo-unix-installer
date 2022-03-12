@@ -16,7 +16,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
 import com.formdev.flatlaf.FlatLightLaf;
-import com.formdev.flatlaf.FlatSystemProperties;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.ui.MainFrame;

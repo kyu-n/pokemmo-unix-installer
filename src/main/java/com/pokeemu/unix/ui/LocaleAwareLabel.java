@@ -1,26 +1,20 @@
 package com.pokeemu.unix.ui;
 
-import java.awt.*;
-
 import com.pokeemu.unix.config.Config;
+
+import javax.swing.*;
 
 /**
  * @author Kyu
  */
-public class LocaleAwareLabel extends Label implements LocaleAwareInterface
+public class LocaleAwareLabel extends JLabel implements LocaleAwareInterface
 {
 	private String key;
 
 	public LocaleAwareLabel(String key)
 	{
-		this(key, Label.LEFT);
-	}
-
-	public LocaleAwareLabel(String key, int alignment)
-	{
 		this.key = key;
 		super.setText(Config.getString(key));
-		setAlignment(alignment);
 
 		LocaleAwareElementManager.instance.addElement(this);
 	}
@@ -46,6 +40,6 @@ public class LocaleAwareLabel extends Label implements LocaleAwareInterface
 	@Override
 	public void setText(String text)
 	{
-		throw new UnsupportedOperationException("Must use locale-aware text constructor");
+		super.setText(Config.getString(key));
 	}
 }

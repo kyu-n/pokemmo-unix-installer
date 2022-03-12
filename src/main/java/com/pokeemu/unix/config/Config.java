@@ -157,7 +157,7 @@ public class Config
 		{
 			return STRINGS.getString(key);
 		}
-		catch(MissingResourceException e)
+		catch(MissingResourceException | NullPointerException e)
 		{
 			return "[" + key + "]";
 		}
@@ -169,7 +169,7 @@ public class Config
 		{
 			return MessageFormat.format(STRINGS.getString(key), params);
 		}
-		catch(MissingResourceException e)
+		catch(MissingResourceException | NullPointerException e)
 		{
 			return "[" + key + "]";
 		}

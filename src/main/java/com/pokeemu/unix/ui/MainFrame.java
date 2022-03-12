@@ -1,5 +1,6 @@
 package com.pokeemu.unix.ui;
 
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -30,7 +31,7 @@ public class MainFrame extends JFrame implements ActionListener
 	private final UnixInstaller parent;
 
 	protected final LocaleAwareLabel status;
-	protected final Label dlSpeed;
+	protected final JLabel dlSpeed;
 
 	protected LocaleAwareButton launchGame;
 	protected LocaleAwareButton configLauncher;
@@ -62,7 +63,7 @@ public class MainFrame extends JFrame implements ActionListener
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
 		status = new LocaleAwareLabel("main.loading");
-		dlSpeed = new Label("");
+		dlSpeed = new JLabel("");
 
 		/**
 		 * Progress Bar initialization
@@ -155,7 +156,7 @@ public class MainFrame extends JFrame implements ActionListener
 				config_panel.add(updateChannelList);
 
 				config_panel.add(new LocaleAwareLabel("config.title.advanced"));
-				config_panel.add(new Label("")); // Dummy widget to fulfill our column requirements
+				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
 
 				LocaleAwareLabel garbageCollectorLabel = new LocaleAwareLabel("config.mem.java_gc");
 				JComboBox<PokeMMOGC> garbageCollectorList = new JComboBox<>(Stream.of(PokeMMOGC.values()).filter(PokeMMOGC::isEnabled).toArray(PokeMMOGC[]::new));
@@ -200,7 +201,7 @@ public class MainFrame extends JFrame implements ActionListener
 				openClientFolder.addActionListener((event) -> Util.open(parent.getPokemmoDir()));
 
 				config_panel.add(openClientFolder);
-				config_panel.add(new Label("")); // Dummy widget to fulfill our column requirements
+				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
 
 				LocaleAwareButton repairClientFolder = new LocaleAwareButton("config.title.repair_client");
 				repairClientFolder.addActionListener((event) ->
@@ -213,7 +214,7 @@ public class MainFrame extends JFrame implements ActionListener
 				});
 
 				config_panel.add(repairClientFolder);
-				config_panel.add(new Label("")); // Dummy widget to fulfill our column requirements
+				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
 			}
 
 			configWindow.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);

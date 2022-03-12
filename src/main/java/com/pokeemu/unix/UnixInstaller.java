@@ -15,7 +15,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
-import com.formdev.flatlaf.FlatIntelliJLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
@@ -128,7 +127,7 @@ public class UnixInstaller
 			return;
 		}
 
-//		checkForRunning();
+		checkForRunning();
 		downloadFeeds();
 
 		File pokemmo_directory = new File(pokemmoDir);
@@ -149,11 +148,11 @@ public class UnixInstaller
 			return;
 		}
 
-//		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
-//		{
-//			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-//			return;
-//		}
+		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
+		{
+			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+			return;
+		}
 
 		if(firstRun)
 		{

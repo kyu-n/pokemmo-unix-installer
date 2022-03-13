@@ -209,7 +209,7 @@ public class MainFrame extends JFrame implements ActionListener
 					if(showYesNoDialogue(Config.getString("status.game_repair_prompt"), Config.getString("config.title.repair_client")))
 					{
 						configWindow.setVisible(false);
-						new UpdaterSwingWorker(parent, MainFrame.this, true).execute();
+						new UpdaterSwingWorker(parent, MainFrame.this, true, true).execute();
 					}
 				});
 

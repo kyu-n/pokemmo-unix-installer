@@ -138,12 +138,7 @@ public class UnixInstaller
 		File pokemmo_directory = new File(pokemmoDir);
 		if(!pokemmo_directory.exists())
 		{
-			if(!pokemmo_directory.mkdirs() && !pokemmo_directory.exists())
-			{
-				mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_1"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-				return;
-			}
-
+			createPokemmoDir();
 			firstRun = true;
 		}
 
@@ -161,27 +156,8 @@ public class UnixInstaller
 
 		if(firstRun)
 		{
-			// Screenshots symlink is only created if XDG_PICTURES_DIR is set. There is no way to predict what the pictures directory is otherwise set to, due to each DE implementing its own (and potentially different languages)
-			String xdg_pictures_home = System.getenv("XDG_PICTURES_DIR");
-			if(xdg_pictures_home != null)
-			{
-				File screenshots = new File(xdg_pictures_home + "/PokeMMO Screenshots/");
-
-				if(!screenshots.exists() && screenshots.mkdir())
-				{
-					try
-					{
-						Files.createSymbolicLink(new File(pokemmoDir + "/screenshots").toPath(), screenshots.toPath());
-					}
-					catch(IOException e)
-					{
-						// Something has already set these up
-						e.printStackTrace();
-					}
-				}
-			}
-
-			new UpdaterSwingWorker(this, mainFrame, false).execute();
+			createSymlinkedDirectories();
+			new UpdaterSwingWorker(this, mainFrame, false, false).execute();
 		}
 		else if(!isPokemmoValid())
 		{
@@ -200,7 +176,7 @@ public class UnixInstaller
 			}
 
 			// If our declared revision is invalid, repair
-			new UpdaterSwingWorker(this, mainFrame, revision <= 0).execute();
+			new UpdaterSwingWorker(this, mainFrame, (revision <= 0 || (MainFeed.MIN_REVISION > 0 && revision >= MainFeed.MIN_REVISION)), false).execute();
 		}
 		else
 		{
@@ -634,6 +610,38 @@ public class UnixInstaller
 	public File getPokemmoDir()
 	{
 		return new File(pokemmoDir);
+	}
+
+	public void createPokemmoDir()
+	{
+		File f = getPokemmoDir();
+		if(!f.mkdirs() && !f.exists())
+		{
+			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_1"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+		}
+	}
+
+	public void createSymlinkedDirectories()
+	{
+		// Screenshots symlink is only created if XDG_PICTURES_DIR is set. There is no way to predict what the pictures directory is otherwise set to, due to each DE implementing its own (and potentially different languages)
+		String xdg_pictures_home = System.getenv("XDG_PICTURES_DIR");
+		if(xdg_pictures_home != null)
+		{
+			File screenshots = new File(xdg_pictures_home + "/PokeMMO Screenshots/");
+
+			if(!screenshots.exists() && screenshots.mkdir())
+			{
+				try
+				{
+					Files.createSymbolicLink(new File(pokemmoDir + "/screenshots").toPath(), screenshots.toPath());
+				}
+				catch(IOException e)
+				{
+					// Something has already set these up
+					e.printStackTrace();
+				}
+			}
+		}
 	}
 
 	public String getStacktraceString(Throwable[] t)

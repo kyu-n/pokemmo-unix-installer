@@ -40,6 +40,8 @@ public class UpdateFeed
 		String sig_format = "SHA256withRSA";
 		PublicKey pub_key = CryptoUtil.getFeedsPublicKey();
 
+		List<Throwable> failures = new ArrayList<>();
+
 		for(int feed_id = 0; feed_id < MainFeed.DOWNLOAD_MIRRORS.length; feed_id++)
 		{
 			try
@@ -111,6 +113,7 @@ public class UpdateFeed
 			}
 			catch(Exception e)
 			{
+				failures.add(e);
 				e.printStackTrace();
 				mainFrame.showInfo(Config.getString("status.networking.feed_load_failed_alt", feed_id));
 			}
@@ -118,7 +121,7 @@ public class UpdateFeed
 
 		if(!SUCCESSFUL)
 		{
-			mainFrame.showError(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.fatal_error"), () -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE));
+			mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.fatal_error"), failures.toArray(new Throwable[0]), () -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE));
 		}
 	}
 

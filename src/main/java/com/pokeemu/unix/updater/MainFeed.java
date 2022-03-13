@@ -3,6 +3,8 @@ package com.pokeemu.unix.updater;
 import java.io.StringReader;
 import java.net.URL;
 import java.security.PublicKey;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -34,11 +36,14 @@ public class MainFeed
 	 * Min client revision allowed. If lower, will force update.
 	 */
 	public static int MIN_REVISION = 0;
+	private static boolean SUCCESSFUL = false;
 
 	public static void load(MainFrame mainFrame)
 	{
 		String sig_format = "SHA256withRSA";
 		PublicKey pub_key = CryptoUtil.getFeedsPublicKey();
+
+		List<Throwable> failures = new ArrayList<>();
 
 		for(String mirror : DOWNLOAD_MIRRORS)
 		{
@@ -64,6 +69,7 @@ public class MainFeed
 				if(main_feed.getElementsByTagName("min_revision").getLength() > 0)
 				{
 					MIN_REVISION = Integer.parseInt(main_feed.getElementsByTagName("min_revision").item(0).getTextContent());
+					SUCCESSFUL = true;
 				}
 
 				break;
@@ -71,12 +77,16 @@ public class MainFeed
 			catch(Exception e) // Something really bad happened. (XML formatting issue / fatal networking error / network signature feed failure)
 			{
 				e.printStackTrace();
-
 				mainFrame.showInfo(Config.getString("status.networking.feed_load_failed_alt", mirror));
-				mainFrame.showError(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.fatal_error"), () -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE));
+				failures.add(e);
 
 				return;
 			}
+		}
+
+		if(!SUCCESSFUL)
+		{
+			mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.fatal_error"), failures.toArray(new Throwable[0]), () -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE));
 		}
 	}
 }

@@ -342,6 +342,21 @@ public class MainFrame extends JFrame implements ActionListener
 		showMessage(message, window_title, JOptionPane.ERROR_MESSAGE, runnable);
 	}
 
+	public void showErrorWithStacktrace(String message, String window_title, String stacktrace, Runnable runnable)
+	{
+		showMessageWithTextArea(message, window_title, stacktrace, JOptionPane.ERROR_MESSAGE, runnable);
+	}
+
+	public void showErrorWithStacktrace(String message, String window_title, Throwable throwable, Runnable runnable)
+	{
+		showMessageWithTextArea(message, window_title, parent.getStacktraceString(throwable), JOptionPane.ERROR_MESSAGE, runnable);
+	}
+
+	public void showErrorWithStacktrace(String message, String window_title, Throwable[] throwables, Runnable runnable)
+	{
+		showMessageWithTextArea(message, window_title, parent.getStacktraceString(throwables), JOptionPane.ERROR_MESSAGE, runnable);
+	}
+
 	public void showInfo(String message, Object... params)
 	{
 		addDetail(message, 90, params);
@@ -355,6 +370,27 @@ public class MainFrame extends JFrame implements ActionListener
 	public void showMessage(String message, String window_title, int information_code, Runnable runnable)
 	{
 		JOptionPane.showMessageDialog(this, message, window_title, information_code);
+		if(runnable != null)
+			executorService.execute(runnable);
+	}
+
+	public void showMessageWithTextArea(String message, String window_title, String textAreaContents, int information_code, Runnable runnable)
+	{
+		JPanel jp = new JPanel();
+		jp.setLayout(new BorderLayout(0, 20));
+
+		JTextArea jta = new JTextArea(textAreaContents);
+		JScrollPane scroll = new JScrollPane(jta);
+
+		scroll.setPreferredSize(new Dimension(500, 200));
+		JLabel msg = new JLabel(message);
+		msg.setHorizontalAlignment(JLabel.LEFT);
+
+		jp.add(msg, BorderLayout.PAGE_START);
+		jp.add(scroll, BorderLayout.CENTER);
+
+		JOptionPane.showMessageDialog(this, jp, window_title, information_code);
+
 		if(runnable != null)
 			executorService.execute(runnable);
 	}

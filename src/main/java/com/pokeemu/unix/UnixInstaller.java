@@ -3,6 +3,8 @@ package com.pokeemu.unix;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -85,6 +87,9 @@ public class UnixInstaller
 	private boolean isLaunching = false;
 	private boolean isUpdating = false;
 
+	StringWriter stackTraceStringWriter = new StringWriter();
+	PrintWriter stackTracePrintWriter = new PrintWriter(stackTraceStringWriter);
+
 
 	private void run()
 	{
@@ -127,7 +132,7 @@ public class UnixInstaller
 			return;
 		}
 
-//		checkForRunning();
+		checkForRunning();
 		downloadFeeds();
 
 		File pokemmo_directory = new File(pokemmoDir);
@@ -148,11 +153,11 @@ public class UnixInstaller
 			return;
 		}
 
-//		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
-//		{
-//			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-//			return;
-//		}
+		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
+		{
+			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+			return;
+		}
 
 		if(firstRun)
 		{
@@ -280,8 +285,7 @@ public class UnixInstaller
 		}
 		catch(IOException e)
 		{
-			e.printStackTrace();
-			mainFrame.showError(Config.getString("status.failed_startup"), Config.getString("status.title.failed_startup"), () -> System.exit(EXIT_CODE_IO_FAILURE));
+			mainFrame.showErrorWithStacktrace(Config.getString("status.failed_startup"), Config.getString("status.title.failed_startup"), getStacktraceString(e), () -> System.exit(EXIT_CODE_IO_FAILURE));
 			return;
 		}
 
@@ -302,7 +306,7 @@ public class UnixInstaller
 		if(processInfo.command().isEmpty())
 		{
 			// Something really bad happened. Our j11 process API doesn't work. Bail out to prevent other issues.
-			mainFrame.showError(Config.getString("status.failed_startup"), Config.getString("status.title.failed_startup"), () -> System.exit(EXIT_CODE_IO_FAILURE));
+			mainFrame.showErrorWithStacktrace(Config.getString("status.failed_startup"), Config.getString("status.title.failed_startup"), "JPROC_FAIL", () -> System.exit(EXIT_CODE_IO_FAILURE));
 			return;
 		}
 
@@ -618,7 +622,7 @@ public class UnixInstaller
 		updateFeed = new UpdateFeed(mainFrame);
 		if(!updateFeed.SUCCESSFUL)
 		{
-			mainFrame.showError(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.network_failure"), () -> System.exit(EXIT_CODE_NETWORK_FAILURE));
+			mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.network_failure"), "UPDATE_FEED_FAILURE_1", () -> System.exit(EXIT_CODE_NETWORK_FAILURE));
 		}
 	}
 
@@ -630,6 +634,28 @@ public class UnixInstaller
 	public File getPokemmoDir()
 	{
 		return new File(pokemmoDir);
+	}
+
+	public String getStacktraceString(Throwable[] t)
+	{
+		StringBuilder sb = new StringBuilder();
+		for(Throwable x : t)
+		{
+			if(sb.length() > 0)
+				sb.append("\n");
+
+			sb.append(getStacktraceString(x));
+		}
+
+		return sb.toString();
+	}
+
+	public String getStacktraceString(Throwable t)
+	{
+		stackTracePrintWriter.flush();
+		stackTraceStringWriter.flush();
+		t.printStackTrace(stackTracePrintWriter);
+		return stackTraceStringWriter.toString();
 	}
 
 	public static void main(String[] args)

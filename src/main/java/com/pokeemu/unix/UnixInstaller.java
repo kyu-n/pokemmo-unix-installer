@@ -189,10 +189,8 @@ public class UnixInstaller
 
 	public void launchGame()
 	{
-		if(isLaunching)
-		{
+		if(isLaunching || isUpdating)
 			return;
-		}
 
 		isLaunching = true;
 		try

@@ -74,7 +74,10 @@ public class UpdaterSwingWorker extends SwingWorker<Void, Void>
 		finally
 		{
 			if(success)
+			{
 				parent.doUpdate(repair);
+				SwingUtilities.invokeLater(() -> mainFrame.setCanStart(false));
+			}
 			else
 				SwingUtilities.invokeLater(() -> mainFrame.showErrorWithStacktrace(Config.getString("error.dir_not_accessible", parent.getPokemmoDir().getAbsolutePath(), "REPAIR_FAILED"), "", failed.toArray(new Throwable[0]), () -> System.exit(UnixInstaller.EXIT_CODE_IO_FAILURE)));
 		}

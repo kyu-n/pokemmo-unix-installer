@@ -451,11 +451,11 @@ public class MainFrame extends JFrame implements ActionListener
 		}
 	}
 
-	public void setCanStart()
+	public void setCanStart(boolean autostart)
 	{
 		launchGame.setEnabled(true);
 
-		if(Config.AUTO_START)
+		if(Config.AUTO_START && autostart)
 		{
 			// Start countdown task
 			Timer timer = new Timer();

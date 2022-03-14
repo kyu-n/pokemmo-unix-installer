@@ -4,6 +4,8 @@ package com.pokeemu.unix.ui;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
@@ -220,9 +222,35 @@ public class MainFrame extends JFrame implements ActionListener
 			configWindow.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
 			configWindow.add(config_panel);
 			configWindow.setTitle(Config.getString("config.title.window"));
-			configWindow.setLocationRelativeTo(MainFrame.this);
-			configWindow.setSize(440, 340);
+			configWindow.setSize(500, 340);
 			configWindow.setResizable(false);
+
+			configWindow.addWindowListener(new WindowListener()
+			{
+				@Override
+				public void windowOpened(WindowEvent e) { }
+				@Override
+				public void windowClosing(WindowEvent e) { }
+				@Override
+				public void windowClosed(WindowEvent e) { }
+				@Override
+				public void windowIconified(WindowEvent e) { }
+				@Override
+				public void windowDeiconified(WindowEvent e) { }
+
+				@Override
+				public void windowActivated(WindowEvent e)
+				{
+					Point p = MainFrame.this.getLocationOnScreen();
+					configWindow.setLocation(p.x + ((MainFrame.this.getWidth())/2) - 200, p.y + (MainFrame.this.getHeight()/2 - 125));
+				}
+
+				@Override
+				public void windowDeactivated(WindowEvent e)
+				{
+					Config.save();
+				}
+			});
 		}
 
 		/**
@@ -249,6 +277,7 @@ public class MainFrame extends JFrame implements ActionListener
 			add(bottom_panel, BorderLayout.PAGE_END);
 		}
 
+		pack();
 		setSize(480, 280);
 		setLocationRelativeTo(null);
 		setTitle(Config.getString("main.title"));

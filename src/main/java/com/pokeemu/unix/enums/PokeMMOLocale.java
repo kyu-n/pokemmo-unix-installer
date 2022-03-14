@@ -21,7 +21,9 @@ public enum PokeMMOLocale
 	ja("日本語", "ja", true),
 	zh("中国人", "zh", true),
 	zh_tw("中國人", "zh-TW", true),
-	fil("Filipino", "fil", true);
+	fil("Filipino", "fil", true),
+	ru("Русские", "ru", false),
+	pl("Polski", "pl", false);
 
 	private final String display_name, lang_tag;
 	private final boolean language_is_selectable;

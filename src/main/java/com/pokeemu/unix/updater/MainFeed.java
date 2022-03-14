@@ -79,8 +79,6 @@ public class MainFeed
 				e.printStackTrace();
 				mainFrame.showInfo(Config.getString("status.networking.feed_load_failed_alt", mirror));
 				failures.add(e);
-
-				return;
 			}
 		}
 

@@ -15,7 +15,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * @author Kyu <kyu@pokemmo.eu>
+ * @author Kyu <kyu@pokemmo.com>
  */
 public class UpdaterSwingWorker extends SwingWorker<Void, Void>
 {

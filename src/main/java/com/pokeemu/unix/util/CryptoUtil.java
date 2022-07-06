@@ -8,7 +8,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 
 /**
- * @author Desu <desu@pokemmo.eu>
+ * @author Desu <desu@pokemmo.com>
  */
 public class CryptoUtil
 {

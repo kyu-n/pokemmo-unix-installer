@@ -46,7 +46,7 @@ import javax.swing.*;
  * <p>
  * This program is created as a pairing to the PokeMMO Game Client. PokeMMO's
  * Game Client software is provided with the PokeMMO License. To view this license, visit
- * https://pokemmo.eu/tos/
+ * https://pokemmo.com/tos/
  * <p>
  * This program manages:
  * - Downloads of the PokeMMO game client
@@ -54,8 +54,8 @@ import javax.swing.*;
  * - Cache management / storage of the program
  * - Execution of the program
  *
- * @author Kyu <kyu@pokemmo.eu>
- * @author Desu <desu@pokemmo.eu>
+ * @author Kyu <kyu@pokemmo.com>
+ * @author Desu <desu@pokemmo.com>
  */
 public class UnixInstaller
 {

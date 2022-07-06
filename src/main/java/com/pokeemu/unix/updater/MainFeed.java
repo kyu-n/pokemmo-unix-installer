@@ -27,8 +27,8 @@ import javax.xml.parsers.DocumentBuilderFactory;
 public class MainFeed
 {
 	public static final String[] DOWNLOAD_MIRRORS = {
-			"https://dl.pokemmo.eu/",
-			"https://files.pokemmo.eu/",
+			"https://dl.pokemmo.com/",
+			"https://files.pokemmo.com/",
 			"https://dl.pokemmo.download/"
 	};
 

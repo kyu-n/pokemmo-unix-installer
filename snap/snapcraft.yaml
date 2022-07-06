@@ -10,7 +10,7 @@ description: |
   platforms.
 
   This game requires a constant internet connection. Usage of this program requires an account
-  with https://pokemmo.eu/ and requires you to accept the PokeMMO Terms of Service at login
+  with https://pokemmo.com/ and requires you to accept the PokeMMO Terms of Service at login
 
 grade: stable
 confinement: strict

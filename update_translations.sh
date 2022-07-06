@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# This script assumes that you have an account which can access Unix Launcher translations on https://translate.pokemmo.eu/api/
+# This script assumes that you have an account which can access Unix Launcher translations on https://translate.pokemmo.com/api/
 # After acquiring said account, do `export TL_APIKEY=YOURAPIKEY` in your environment prior to running this script
 if [[ -z $TL_APIKEY ]]; then
-	echo "TL_APIKEY env variable is unset. Can not access translate.pokemmo.eu"
+	echo "TL_APIKEY env variable is unset. Can not access translate.pokemmo.com"
 	exit 1
 fi
 
@@ -25,7 +25,7 @@ for lang in zh fr de it ja ko ptbr es fil; do
 		fil) OUTPUT_FILENAME=MessagesBundle_fil.properties ; TL_LANGCODE=fil ;;
 	esac
 
-	curl -H "Authorization: Token $TL_APIKEY" https://translate.pokemmo.eu/api/translations/client/unix-installer/$TL_LANGCODE/file/ -o $OUTPUT_FILENAME
+	curl -H "Authorization: Token $TL_APIKEY" https://translate.pokemmo.com/api/translations/client/unix-installer/$TL_LANGCODE/file/ -o $OUTPUT_FILENAME
 done
 
 opencc -i MessagesBundle_zh.properties -o MessagesBundle_zh_TW.properties -c /usr/share/opencc/s2twp.json

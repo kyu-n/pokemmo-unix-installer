@@ -6,7 +6,7 @@ package com.pokeemu.unix.enums;
 public enum PokeMMOGC
 {
 	G1("-XX:+UseG1GC", true),
-	ZGC("-XX:+UseZGC", false), // Requires J16+ for stability; Disabled until we migrate to J17 compliance
+	ZGC("-XX:+UseZGC", true),
 	Shenandoah("-XX:+UseShenandoahGC", true);
 
 	public final String launch_arg;
@@ -25,6 +25,6 @@ public enum PokeMMOGC
 
 	public static PokeMMOGC getDefault()
 	{
-		return Shenandoah;
+		return ZGC;
 	}
 }	

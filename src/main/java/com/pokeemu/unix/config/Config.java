@@ -81,7 +81,7 @@ public class Config
 				HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MAX;
 			}
 
-			ACTIVE_GC = PokeMMOGC.valueOf(props.getProperty("active_gc", "Shenandoah"));
+			ACTIVE_GC = PokeMMOGC.valueOf(props.getProperty("active_gc", "ZGC"));
 			ACTIVE_LOCALE = PokeMMOLocale.getFromString(props.getProperty("launcher_locale"));
 
 			UPDATE_CHANNEL = UpdateChannel.valueOf(props.getProperty("update_channel"));

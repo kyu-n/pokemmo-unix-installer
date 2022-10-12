@@ -73,9 +73,9 @@ parts:
     override-build: |
       set -x
       case "$SNAPCRAFT_TARGET_ARCH" in
-        amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java11-amd64" ;;
-        arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java11-aarch64" ;;
-        armhf) export JRE_TARGET="/usr/lib/jvm/bellsoft-java11-arm32-vfp-hflt" ;;
+        amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-amd64" ;;
+        arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-aarch64" ;;
+        armhf) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-arm32-vfp-hflt" ;;
       esac && \
       ./gradlew assemble && \
       mkdir $SNAPCRAFT_PART_INSTALL/jar && \
@@ -85,5 +85,5 @@ parts:
       - libglu1-mesa
       - yad
     build-packages:
-      - bellsoft-java11
+      - bellsoft-java17
       - ca-certificates-java

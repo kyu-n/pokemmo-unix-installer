@@ -7,7 +7,7 @@ public enum PokeMMOGC
 {
 	G1("-XX:+UseG1GC", true),
 	ZGC("-XX:+UseZGC", true),
-	Shenandoah("-XX:+UseShenandoahGC", true);
+	Shenandoah("-XX:+UseShenandoahGC", false);
 
 	public final String launch_arg;
 	public final boolean is_enabled;

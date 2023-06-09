@@ -148,11 +148,11 @@ public class MainFrame extends JFrame implements ActionListener
 				updateChannelList.setSelectedItem(Config.UPDATE_CHANNEL);
 				updateChannelList.addActionListener((event) -> {
 					Config.UPDATE_CHANNEL = (UpdateChannel) updateChannelList.getSelectedItem();
+					parent.doUpdate(false);
 					Config.save();
 				});
 
-				// TODO: Care about this
-				updateChannelList.setEnabled(false);
+				updateChannelList.setEnabled(UpdateChannel.ENABLED_UPDATE_CHANNELS.length > 1);
 
 				config_panel.add(updateChannelLabel);
 				config_panel.add(updateChannelList);

@@ -49,8 +49,8 @@ public class UpdateFeed
 				files.clear();
 				boolean has_valid_file_entry = false;
 
-				byte[] raw = Util.getBytes(new URL(MainFeed.DOWNLOAD_MIRRORS[feed_id] + "/feeds/update_feed.txt").openStream());
-				byte[] signature = Util.getBytes(new URL(MainFeed.DOWNLOAD_MIRRORS[feed_id] + "/feeds/update_feed.sig256").openStream());
+				byte[] raw = Util.getBytes(new URL(MainFeed.DOWNLOAD_MIRRORS[feed_id] +"/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/update_feed.txt").openStream());
+				byte[] signature = Util.getBytes(new URL(MainFeed.DOWNLOAD_MIRRORS[feed_id] + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/update_feed.sig256").openStream());
 
 				if(!CryptoUtil.verifySignature(raw, signature, pub_key, sig_format))
 				{

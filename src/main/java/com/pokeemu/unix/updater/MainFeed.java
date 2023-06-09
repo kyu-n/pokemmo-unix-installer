@@ -49,8 +49,8 @@ public class MainFeed
 		{
 			try
 			{
-				byte[] raw = Util.getBytes(new URL(mirror + "/feeds/main_feed.txt").openStream());
-				byte[] signature = Util.getBytes(new URL(mirror + "/feeds/main_feed.sig256").openStream());
+				byte[] raw = Util.getBytes(new URL(mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/main_feed.txt").openStream());
+				byte[] signature = Util.getBytes(new URL(mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/main_feed.sig256").openStream());
 
 				if(!CryptoUtil.verifySignature(raw, signature, pub_key, sig_format))
 				{

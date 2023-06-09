@@ -491,7 +491,7 @@ public class UnixInstaller
 				continue;
 			}
 
-			if(!Util.downloadUrlToFile(MainFeed.DOWNLOAD_MIRRORS[mirror_index] + "/download/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
+			if(!Util.downloadUrlToFile(MainFeed.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
 			{
 				System.out.println("FAILURE");
 				mainFrame.showInfo("status.files.failed_download", file.name, mirror_index);

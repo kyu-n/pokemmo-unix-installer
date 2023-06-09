@@ -8,7 +8,7 @@ import java.util.stream.Stream;
 public enum UpdateChannel
 {
 	live(true),
-	pts(false); // PTS client support is not yet enabled
+	pts(true);
 
 	public static final UpdateChannel[] ENABLED_UPDATE_CHANNELS;
 

@@ -68,7 +68,6 @@ public class Config
 			}
 
 			AUTO_START = Boolean.parseBoolean(props.getProperty("auto_start", "false"));
-			// UPDATE_CHANNEL = UpdateChannel.valueOf(props.getProperty("update_channel"));
 
 			HARD_MAX_MEMORY_MB = Short.parseShort(props.getProperty("max_mem_hard", "512"));
 

@@ -1,0 +1,49 @@
+app-id: com.pokemmo.flatpak
+runtime: org.freedesktop.Platform
+runtime-version: '22.08'
+sdk: org.freedesktop.Sdk
+command: launch.sh
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --share=network
+  - --device=dri
+  - --socket=pulseaudio
+modules:
+  - name: PokeMMO
+    buildsystem: simple
+    only-arches: [x86_64, aarch64, arm]
+    build-commands:
+      - echo $FLATPAK_ARCH
+      - cp gradle-7.6.2-bin.zip gradle/wrapper/gradle-7.6.2-bin.zip
+      - JAVA_HOME=$FLATPAK_BUILDER_BUILDDIR/jdk-17.0.8 JRE_TARGET=$FLATPAK_BUILDER_BUILDDIR/jdk-17.0.8 ./gradlew assemble --offline
+      - mkdir -p /app/bin/runtime/
+      - cp -r build/runtime/ /app/bin/
+      - install -D build/libs/unix-installer.jar /app/bin/unix-installer.jar
+      - install -D flatpak/launch.sh /app/bin/launch.sh
+    sources:
+      - type: git
+        url: https://github.com/kyu-n/pokemmo-unix-installer.git
+        branch: flatpak-tests
+      - type: file
+        url: https://services.gradle.org/distributions/gradle-7.6.2-bin.zip
+        sha256: a01b6587e15fe7ed120a0ee299c25982a1eee045abd6a9dd5e216b2f628ef9ac
+      - type: archive
+        url: https://download.bell-sw.com/java/17.0.8+7/bellsoft-jdk17.0.8+7-linux-amd64.tar.gz
+        archive-type: tar-gzip
+        strip-components: 0
+        only-arches: [x86_64]
+        sha256: 96e0111e405125fc250c4e78d9973e8dcefd0733629b2c40af942d37a9c74c0f
+      - type: archive
+        url: https://download.bell-sw.com/java/17.0.8+7/bellsoft-jdk17.0.8+7-linux-aarch64.tar.gz
+        archive-type: tar-gzip
+        strip-components: 0
+        only-arches: [aarch64]
+        sha256: 914500e3faec93146742e325f7cb9f3175eac695eef7fc024a954b5ebe828046
+      - type: archive
+        url: https://download.bell-sw.com/java/17.0.8+7/bellsoft-jdk17.0.8+7-linux-arm32-vfp-hflt.tar.gz
+        archive-type: tar-gzip
+        strip-components: 0
+        only-arches: [arm]
+        sha256: 4959fd42e93ba496d01d6418a36533c0dd60a9848ac8c4a9c00250d2bc2d6244

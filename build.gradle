@@ -12,12 +12,12 @@ dependencies {
 }
 
 compileJava {
-    options.release = 11
+    options.release = 17
 }
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(11)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 

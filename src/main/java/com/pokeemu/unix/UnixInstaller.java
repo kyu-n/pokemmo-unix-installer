@@ -5,7 +5,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -21,8 +23,7 @@ import com.formdev.flatlaf.FlatLightLaf;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.ui.MainFrame;
-import com.pokeemu.unix.updater.MainFeed;
-import com.pokeemu.unix.updater.UpdateFeed;
+import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdateFile;
 import com.pokeemu.unix.updater.UpdaterSwingWorker;
 import com.pokeemu.unix.util.Util;
@@ -66,7 +67,6 @@ public class UnixInstaller
 	public static final int EXIT_CODE_IO_FAILURE = 2;
 	public static final int EXIT_CODE_UNK_FAILURE = -127;
 
-	private UpdateFeed updateFeed;
 	private MainFrame mainFrame;
 
 	/**
@@ -90,6 +90,15 @@ public class UnixInstaller
 	StringWriter stackTraceStringWriter = new StringWriter();
 	PrintWriter stackTracePrintWriter = new PrintWriter(stackTraceStringWriter);
 
+	public static final HttpClient httpClient;
+
+	static
+	{
+		httpClient  = HttpClient.newBuilder()
+				.followRedirects(HttpClient.Redirect.ALWAYS)
+				.connectTimeout(Duration.ofSeconds(10))
+				.build();
+	}
 
 	private void run()
 	{
@@ -126,7 +135,7 @@ public class UnixInstaller
 			}
 		}
 
-		if(majorver != 11 && majorver != 17)
+		if(majorver < 17)
 		{
 			mainFrame.showError(Config.getString("error.incompatible_jvm", Config.getString("status.title.failed_startup")), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
 			return;
@@ -176,7 +185,7 @@ public class UnixInstaller
 			}
 
 			// If our declared revision is invalid, repair
-			new UpdaterSwingWorker(this, mainFrame, (revision <= 0 || (MainFeed.MIN_REVISION > 0 && revision >= MainFeed.MIN_REVISION)), false).execute();
+			new UpdaterSwingWorker(this, mainFrame, (revision <= 0 || (FeedManager.MIN_REVISION > 0 && revision >= FeedManager.MIN_REVISION)), false).execute();
 		}
 		else
 		{
@@ -305,7 +314,7 @@ public class UnixInstaller
 			}
 		});
 
-		if(destroyables.size() > 0)
+		if(!destroyables.isEmpty())
 		{
 			if(mainFrame.showYesNoDialogue(Config.getString("status.game_already_running"), ""))
 			{
@@ -335,7 +344,7 @@ public class UnixInstaller
 
 		mainFrame.setStatus("status.game_verification", 20);
 
-		for(UpdateFile file : updateFeed.getFiles())
+		for(UpdateFile file : FeedManager.getFiles())
 		{
 			if(file.only_if_not_exists)
 			{
@@ -364,7 +373,7 @@ public class UnixInstaller
 			}
 		}
 
-		return invalidFiles.size() < 1;
+		return invalidFiles.isEmpty();
 	}
 
 	public void doUpdate(boolean repair)
@@ -386,7 +395,7 @@ public class UnixInstaller
 
 		ExecutorService networkExecutorService = Executors.newFixedThreadPool(Config.NETWORK_THREADS);
 
-		int total_files = updateFeed.getFiles().size();
+		int total_files = FeedManager.getFiles().size();
 		if(total_files < 1)
 		{
 			total_files = 1;
@@ -396,7 +405,7 @@ public class UnixInstaller
 
 		List<UpdateFile> to_download = new ArrayList<>();
 
-		for(UpdateFile file : updateFeed.getFiles())
+		for(UpdateFile file : FeedManager.getFiles())
 		{
 			if(!file.shouldDownload())
 			{
@@ -435,7 +444,7 @@ public class UnixInstaller
 			counter++;
 		}
 
-		if(to_download.size() < 1)
+		if(to_download.isEmpty())
 		{
 			mainFrame.setStatus("status.game_verified", 90);
 			mainFrame.setStatus("status.ready", 100);
@@ -484,14 +493,14 @@ public class UnixInstaller
 	private boolean downloadFile(UpdateFile file)
 	{
 		String checksum_sha256 = file.sha256;
-		for(int mirror_index = 0; mirror_index < MainFeed.DOWNLOAD_MIRRORS.length; mirror_index++)
+		for(int mirror_index = 0; mirror_index < FeedManager.DOWNLOAD_MIRRORS.length; mirror_index++)
 		{
 			if(disabledMirrors.contains(mirror_index))
 			{
 				continue;
 			}
 
-			if(!Util.downloadUrlToFile(MainFeed.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
+			if(!Util.downloadUrlToFile(FeedManager.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
 			{
 				System.out.println("FAILURE");
 				mainFrame.showInfo("status.files.failed_download", file.name, mirror_index);
@@ -579,21 +588,10 @@ public class UnixInstaller
 
 	private void downloadFeeds()
 	{
-		try
-		{
-			System.setProperty("http.agent", "Mozilla/5.0 (PokeMMO; UnixInstaller v" + INSTALLER_VERSION + ")");
-		}
-		catch(Exception e)
-		{
-			// Don't care
-		}
-
 		mainFrame.setStatus("status.networking.load", 0);
+		FeedManager.load(mainFrame);
 
-		MainFeed.load(mainFrame);
-
-		updateFeed = new UpdateFeed(mainFrame);
-		if(!updateFeed.SUCCESSFUL)
+		if(!FeedManager.SUCCESSFUL)
 		{
 			mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.network_failure"), "UPDATE_FEED_FAILURE_1", () -> System.exit(EXIT_CODE_NETWORK_FAILURE));
 		}

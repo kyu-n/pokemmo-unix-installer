@@ -14,14 +14,20 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
+import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
 
+import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.ui.MainFrame;
 
@@ -227,7 +233,7 @@ public class Util
 	 */
 	public static String sanitize(final File dir, final String entry)
 	{
-		if(entry.length() == 0)
+		if(entry.isEmpty())
 		{
 			return null;
 		}
@@ -255,6 +261,27 @@ public class Util
 		}
 
 		return null;
+	}
+
+	public static HttpResponse<InputStream> getUrl(HttpClient httpClient, String raw_url) throws URISyntaxException, IOException, InterruptedException
+	{
+		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(raw_url))
+				.setHeader("User-Agent", "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION +")")
+				.GET()
+				.build();
+
+
+		return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+	}
+
+	public static CompletableFuture<HttpResponse<InputStream>> getUrlAsync(HttpClient httpClient, String raw_url) throws URISyntaxException
+	{
+		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(raw_url))
+				.setHeader("User-Agent", "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION +")")
+				.GET()
+				.build();
+
+		return httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 	}
 
 	/**

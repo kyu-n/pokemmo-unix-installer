@@ -1,6 +1,6 @@
 name: pokemmo
 title: PokeMMO
-base: core20
+base: core22
 version: '1.9a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
@@ -22,7 +22,7 @@ architectures:
   - build-on: amd64
 
 assumes:
-  - snapd2.43
+  - snapd2.55
 
 package-repositories:
   - type: apt
@@ -34,7 +34,7 @@ package-repositories:
 apps:
   pokemmo:
     command: runtime/bin/java -jar $SNAP/jar/unix-installer.jar
-    extensions: [ gnome-3-38 ]
+    extensions: [ gnome ]
     plugs:
       - network
       - opengl
@@ -59,7 +59,7 @@ parts:
   gradle:
     plugin: nil
     override-pull: |
-      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.6.4-bin.zip -o gradle-7.6.4-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.6.4-bin.zip $SNAPCRAFT_STAGE
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.6.4-bin.zip -o gradle-7.6.4-bin.zip && mv $CRAFT_PART_SRC/gradle-7.6.4-bin.zip $CRAFT_STAGE
     build-packages:
       - curl
   pokemmo:
@@ -69,18 +69,18 @@ parts:
     source-type: git
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |
-      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.6.4-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.6.4-bin.zip
+      craftctl pull && cp $CRAFT_STAGE/gradle-7.6.4-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-7.6.4-bin.zip
     override-build: |
       set -x
-      case "$SNAPCRAFT_TARGET_ARCH" in
+      case "$CRAFT_TARGET_ARCH" in
         amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-amd64" ;;
         arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-aarch64" ;;
         armhf) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-arm32-vfp-hflt" ;;
       esac && \
       ./gradlew assemble && \
-      mkdir $SNAPCRAFT_PART_INSTALL/jar && \
-      cp build/libs/unix-installer.jar $SNAPCRAFT_PART_INSTALL/jar/unix-installer.jar && \
-      mv build/runtime $SNAPCRAFT_PART_INSTALL
+      mkdir $CRAFT_PART_INSTALL/jar && \
+      cp build/libs/unix-installer.jar $CRAFT_PART_INSTALL/jar/unix-installer.jar && \
+      mv build/runtime $CRAFT_PART_INSTALL
     stage-packages:
       - libglu1-mesa
       - yad

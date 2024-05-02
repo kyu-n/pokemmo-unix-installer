@@ -72,7 +72,7 @@ parts:
       craftctl default && cp $CRAFT_STAGE/gradle-7.6.4-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-7.6.4-bin.zip
     override-build: |
       set -x
-      case "$CRAFT_TARGET_ARCH" in
+      case "$CRAFT_ARCH_BUILD_FOR" in
         amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-amd64" ;;
         arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-aarch64" ;;
         armhf) export JRE_TARGET="/usr/lib/jvm/bellsoft-java17-arm32-vfp-hflt" ;;

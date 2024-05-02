@@ -91,13 +91,30 @@ public class UnixInstaller
 	PrintWriter stackTracePrintWriter = new PrintWriter(stackTraceStringWriter);
 
 	public static final HttpClient httpClient;
+	public static final String snapcraft, flatpak, httpClientUserAgent;
 
 	static
 	{
 		httpClient  = HttpClient.newBuilder()
-				.followRedirects(HttpClient.Redirect.ALWAYS)
-				.connectTimeout(Duration.ofSeconds(10))
+				.followRedirects(HttpClient.Redirect.NORMAL)
+				.connectTimeout(Duration.ofSeconds(20))
 				.build();
+
+		snapcraft = System.getenv("POKEMMO_IS_SNAPPED");
+		flatpak = System.getenv("POKEMMO_IS_FLATPAKED");
+
+		if(snapcraft != null)
+		{
+			httpClientUserAgent = "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION+") (Snapcraft)";
+		}
+		else if (flatpak != null)
+		{
+			httpClientUserAgent = "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION+") (Flatpak)";
+		}
+		else
+		{
+			httpClientUserAgent = "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION+")";
+		}
 	}
 
 	private void run()
@@ -253,10 +270,13 @@ public class UnixInstaller
 //		pb.environment().put("GTK_USE_PORTALS", "1");
 		pb.environment().put("POKEMMO_UNIX_LAUNCHER_VER", Integer.toString(INSTALLER_VERSION));
 
-		String snap_env = System.getenv("POKEMMO_IS_SNAPPED");
-		if(snap_env != null)
+		if(snapcraft != null)
 		{
-			pb.environment().put("POKEMMO_IS_SNAPPED", snap_env);
+			pb.environment().put("POKEMMO_IS_SNAPPED", snapcraft);
+		}
+		else if(flatpak != null)
+		{
+			pb.environment().put("POKEMMO_IS_FLATPAKED", snapcraft);
 		}
 
 		System.out.println("Starting with params " + Arrays.toString(final_args.toArray(new String[0])));
@@ -278,7 +298,7 @@ public class UnixInstaller
 	{
 		/*
 		 * It's safe to assume that only one process may use this processes's JRE, and it should be sufficient to query if any other processes are running from the current directory
-		 * This is not usable on Windows/Linux due to the potential for shared JREs/JDKs, but the approach works on macOS due to the app format
+		 * This is not usable on Windows due to the potential for shared JREs/JDKs, but the approach works on macOS due to the app format and Linux due to Snapcraft / Flatpak isolation
 		 */
 		ProcessHandle processHandle = ProcessHandle.current();
 		ProcessHandle.Info processInfo = processHandle.info();
@@ -500,9 +520,8 @@ public class UnixInstaller
 				continue;
 			}
 
-			if(!Util.downloadUrlToFile(FeedManager.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
+			if(!Util.downloadUrlToFile(httpClient, FeedManager.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
 			{
-				System.out.println("FAILURE");
 				mainFrame.showInfo("status.files.failed_download", file.name, mirror_index);
 				disabledMirrors.add(mirror_index);
 				continue;

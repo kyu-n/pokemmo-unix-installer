@@ -22,6 +22,7 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
@@ -263,21 +264,26 @@ public class Util
 		return null;
 	}
 
+	/**
+	 * Sends a synchronized HTTP GET request using the requested HttpClient, returning the value as an InputStream
+	 */
 	public static HttpResponse<InputStream> getUrl(HttpClient httpClient, String raw_url) throws URISyntaxException, IOException, InterruptedException
 	{
 		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(raw_url))
-				.setHeader("User-Agent", "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION +")")
+				.setHeader("User-Agent", UnixInstaller.httpClientUserAgent)
 				.GET()
 				.build();
-
 
 		return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 	}
 
+	/**
+	 * Sends an asynchronous HTTP GET request using the requested HttpClient, returning the value as an InputStream
+	 */
 	public static CompletableFuture<HttpResponse<InputStream>> getUrlAsync(HttpClient httpClient, String raw_url) throws URISyntaxException
 	{
 		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(raw_url))
-				.setHeader("User-Agent", "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION +")")
+				.setHeader("User-Agent", UnixInstaller.httpClientUserAgent)
 				.GET()
 				.build();
 
@@ -285,59 +291,57 @@ public class Util
 	}
 
 	/**
-	 * Downloads and saves the requested URL to the requested filename
+	 * Sends a synchronized HTTP GET request using the requested HttpClient, returning the value as an InputStream.
+	 * This method accepts content compression where available
 	 */
-	public static boolean downloadUrlToFile(String raw_url, File file)
+	public static HttpResponse<InputStream> downloadFile(HttpClient httpClient, String raw_url) throws URISyntaxException, IOException, InterruptedException
+	{
+		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(raw_url))
+				.setHeader("User-Agent", UnixInstaller.httpClientUserAgent)
+				.setHeader("Accept-Encoding", "gzip, deflate")
+				.GET()
+				.build();
+
+		return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+	}
+
+	/**
+	 * Downloads and saves the requested URL to the requested filename
+	 * @return true, if the http server successfully responded to the request. false if an exception occurred.
+	 * A true response does not necessarily mean the server responded with what you want (e.g. a 404 request will return an http snippet.)
+	 */
+	public static boolean downloadUrlToFile(HttpClient httpClient, String raw_url, File file)
 	{
 		try
 		{
 			raw_url = raw_url.replace("\\", "/");
 
-			URL url = new URL(raw_url);
-			HttpURLConnection sourceConnection = ((HttpURLConnection) url.openConnection());
-			sourceConnection.setRequestProperty("Accept-Encoding", "gzip, deflate");
-			sourceConnection.connect();
-
-
-			String encoding = sourceConnection.getContentEncoding();
+			HttpResponse<InputStream> downloadResponse = downloadFile(httpClient, raw_url);
+			String encoding = downloadResponse.headers().firstValue("Content-Encoding").orElse("");
 
 			InputStream resultingInputStream;
-			if(encoding != null && encoding.equalsIgnoreCase("gzip"))
-			{
-				resultingInputStream = new GZIPInputStream(sourceConnection.getInputStream());
-			}
-			else if(encoding != null && encoding.equalsIgnoreCase("deflate"))
-			{
-				resultingInputStream = new InflaterInputStream(sourceConnection.getInputStream(), new Inflater(true));
-			}
-			else
-			{
-				resultingInputStream = sourceConnection.getInputStream();
-			}
+			InputStream rawInputStream = downloadResponse.body();
 
-			BufferedInputStream in = new BufferedInputStream(resultingInputStream);
+			switch(encoding.toLowerCase(Locale.ROOT))
+			{
+				case "gzip" -> resultingInputStream = new GZIPInputStream(rawInputStream);
+				case "deflate" -> resultingInputStream = new InflaterInputStream(rawInputStream, new Inflater(true));
+				default -> resultingInputStream = rawInputStream;
+			}
 
 			//Make parent dirs if not exist
-			File parent = file.getParentFile();
-			if(parent != null && !parent.exists())
+			try(BufferedInputStream in = new BufferedInputStream(resultingInputStream) ;
+				BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(file), 1024))
 			{
-				parent.mkdirs();
+				byte[] data = new byte[1024];
+				int x;
+
+				while((x = in.read(data, 0, 1024)) >= 0)
+				{
+					bout.write(data, 0, x);
+				}
 			}
 
-			FileOutputStream fos = new FileOutputStream(file);
-			BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
-
-			byte[] data = new byte[1024];
-			int x;
-			while((x = in.read(data, 0, 1024)) >= 0)
-			{
-				MainFrame.getInstance().showDownloadProgress(x);
-
-				bout.write(data, 0, x);
-			}
-
-			bout.close();
-			in.close();
 			return true;
 		}
 		catch(Exception e)

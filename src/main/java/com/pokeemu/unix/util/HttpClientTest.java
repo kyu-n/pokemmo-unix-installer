@@ -1,18 +1,19 @@
 package com.pokeemu.unix.util;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.http.HttpResponse;
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
+
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
-import com.pokeemu.unix.ui.MainFrame;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * @author Kyu
@@ -21,7 +22,7 @@ public class HttpClientTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		new HttpClientTest().run();
+		new HttpClientTest().run2();
 	}
 
 	private void run() throws Exception
@@ -58,5 +59,45 @@ public class HttpClientTest
 		System.out.println("Update feed passed verification in " + (System.currentTimeMillis() - start)+"ms");
 
 		System.out.println("Job's done " + (System.currentTimeMillis() - start)+"ms");
+	}
+
+	private void run2()
+	{
+		try
+		{
+			HttpResponse<InputStream> downloadResponse = Util.downloadFile(UnixInstaller.httpClient, "https://dl.pokemmo.com/live/current/feeds/main_feed.txt");
+
+			String encoding = downloadResponse.headers().firstValue("Content-Encoding").orElse("");
+
+			InputStream resultingInputStream;
+			InputStream rawInputStream = downloadResponse.body();
+
+			switch(encoding.toLowerCase(Locale.ROOT))
+			{
+				case "gzip" -> resultingInputStream = new GZIPInputStream(rawInputStream);
+				case "deflate" -> resultingInputStream = new InflaterInputStream(rawInputStream, new Inflater(true));
+				default -> resultingInputStream = rawInputStream;
+			}
+
+			//Make parent dirs if not exist
+			File file = new File(System.getProperty("user.dir")+"/main_feed.txt");
+
+			try(BufferedInputStream in = new BufferedInputStream(resultingInputStream) ; FileOutputStream fos = new FileOutputStream(file)
+				; BufferedOutputStream bout = new BufferedOutputStream(fos, 1024))
+			{
+				byte[] data = new byte[1024];
+				int x;
+				while((x = in.read(data, 0, 1024)) >= 0)
+				{
+					bout.write(data, 0, x);
+				}
+			}
+
+			System.out.println("Job's done");
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
 	}
 }

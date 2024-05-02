@@ -276,7 +276,7 @@ public class UnixInstaller
 		}
 		else if(flatpak != null)
 		{
-			pb.environment().put("POKEMMO_IS_FLATPAKED", snapcraft);
+			pb.environment().put("POKEMMO_IS_FLATPAKED", flatpak);
 		}
 
 		System.out.println("Starting with params " + Arrays.toString(final_args.toArray(new String[0])));
@@ -663,7 +663,7 @@ public class UnixInstaller
 		StringBuilder sb = new StringBuilder();
 		for(Throwable x : t)
 		{
-			if(sb.length() > 0)
+			if(!sb.isEmpty())
 				sb.append("\n");
 
 			sb.append(getStacktraceString(x));

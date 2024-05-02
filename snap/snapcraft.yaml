@@ -59,7 +59,7 @@ parts:
   gradle:
     plugin: nil
     override-pull: |
-      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.5.1-bin.zip -o gradle-7.5.1-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.5.1-bin.zip $SNAPCRAFT_STAGE
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-7.6.4-bin.zip -o gradle-7.6.4-bin.zip && mv $SNAPCRAFT_PART_SRC/gradle-7.6.4-bin.zip $SNAPCRAFT_STAGE
     build-packages:
       - curl
   pokemmo:
@@ -69,7 +69,7 @@ parts:
     source-type: git
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |
-      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.5.1-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.5.1-bin.zip
+      snapcraftctl pull && cp $SNAPCRAFT_STAGE/gradle-7.6.4-bin.zip $SNAPCRAFT_PART_SRC/gradle/wrapper/gradle-7.6.4-bin.zip
     override-build: |
       set -x
       case "$SNAPCRAFT_TARGET_ARCH" in

@@ -83,7 +83,7 @@ parts:
       mv build/runtime $CRAFT_PART_INSTALL
     stage-packages:
       - libglu1-mesa
-      - yad
+      - zenity
     build-packages:
       - bellsoft-java17
       - ca-certificates-java

@@ -9,7 +9,6 @@ apply plugin: "idea"
 
 dependencies {
     implementation files('libs/flatlaf-3.4.1.jar')
-    implementation files('libs/jSystemThemeDetector-3.9.1.jar')
 }
 
 compileJava {

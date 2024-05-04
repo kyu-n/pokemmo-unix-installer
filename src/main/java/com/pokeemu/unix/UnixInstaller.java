@@ -19,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
+import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOGC;
@@ -687,7 +688,7 @@ public class UnixInstaller
 
 		if(GnomeThemeDetector.isDark())
 		{
-			FlatLightLaf.setup();
+			FlatDarkLaf.setup();
 		}
 		else
 		{

@@ -172,11 +172,11 @@ public class FeedManager
 				mainFrame.showInfo(Config.getString("status.networking.feed_load_failed_alt", mirror));
 				failures.add(e);
 			}
+		}
 
-			if(!SUCCESSFUL)
-			{
-				mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.fatal_error"), failures.toArray(new Throwable[0]), () -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE));
-			}
+		if(!SUCCESSFUL)
+		{
+			mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.fatal_error"), failures.toArray(new Throwable[0]), () -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE));
 		}
 	}
 

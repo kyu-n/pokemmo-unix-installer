@@ -121,17 +121,6 @@ public class MainFrame extends JFrame implements ActionListener
 				config_panel.add(localeLabel);
 				config_panel.add(localeList);
 
-				LocaleAwareLabel autoStartLabel = new LocaleAwareLabel("config.title.autostart");
-				LocaleAwareCheckbox autoStartCb = new LocaleAwareCheckbox();
-				autoStartCb.setSelected(Config.AUTO_START);
-				autoStartCb.addActionListener((event) -> {
-					Config.AUTO_START = autoStartCb.isSelected();
-					Config.save();
-				});
-
-				config_panel.add(autoStartLabel);
-				config_panel.add(autoStartCb);
-
 				LocaleAwareLabel networkThreadsLabel = new LocaleAwareLabel("config.title.dl_threads");
 				SpinnerNumberModel networkThreadsModel = new SpinnerNumberModel(Config.NETWORK_THREADS, 1, Config.NETWORK_THREADS_MAX, 1);
 				JSpinner networkThreadsSpinner = new JSpinner(networkThreadsModel);
@@ -282,7 +271,7 @@ public class MainFrame extends JFrame implements ActionListener
 		setLocationRelativeTo(null);
 		setTitle(Config.getString("main.title"));
 		setResizable(false);
-		setVisible(true);
+		setVisible(!UnixInstaller.FORCE_QUICK_AUTOSTART);
 	}
 
 	@Override
@@ -451,41 +440,13 @@ public class MainFrame extends JFrame implements ActionListener
 		}
 	}
 
-	public void setCanStart(boolean autostart)
+	public void setCanStart()
 	{
 		launchGame.setEnabled(true);
 
-		if(Config.AUTO_START && autostart)
+		if(UnixInstaller.FORCE_QUICK_AUTOSTART)
 		{
-			// Start countdown task
-			Timer timer = new Timer();
-			TimerTask task = new TimerTask()
-			{
-				@Override
-				public void run()
-				{
-					timer.cancel();
-
-					if(configWindow.isVisible())
-					{
-						launchGame.setTextKey("main.launch");
-						launchGame.addActionListener((event2) -> parent.launchGame());
-					}
-					else
-					{
-						parent.launchGame();
-					}
-				}
-			};
-
-			timer.scheduleAtFixedRate(task, 500, 500);
-
-			launchGame.addActionListener((event) ->
-			{
-				timer.cancel();
-				launchGame.setTextKey(Config.getString("main.launch"));
-				launchGame.addActionListener((event2) -> parent.launchGame());
-			});
+			parent.launchGame();
 		}
 		else
 		{

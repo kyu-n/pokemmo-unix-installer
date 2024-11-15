@@ -62,7 +62,7 @@ import javax.swing.*;
  */
 public class UnixInstaller
 {
-	public static final int INSTALLER_VERSION = 20;
+	public static final int INSTALLER_VERSION = 21;
 
 	public static final int EXIT_CODE_SUCCESS = 0;
 	public static final int EXIT_CODE_NETWORK_FAILURE = 1;
@@ -154,7 +154,7 @@ public class UnixInstaller
 			}
 		}
 
-		if(majorver < 17)
+		if(majorver < 21)
 		{
 			mainFrame.showError(Config.getString("error.incompatible_jvm", Config.getString("status.title.failed_startup")), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
 			return;
@@ -184,11 +184,21 @@ public class UnixInstaller
 
 		if(firstRun)
 		{
+			if(FORCE_QUICK_AUTOSTART)
+			{
+				displayMainFrame();
+			}
+
 			createSymlinkedDirectories();
 			new UpdaterSwingWorker(this, mainFrame, false, false).execute();
 		}
 		else if(!isPokemmoValid())
 		{
+			if(FORCE_QUICK_AUTOSTART)
+			{
+				displayMainFrame();
+			}
+
 			File revision_file = new File(pokemmoDir + "/revision.txt");
 			int revision = -1;
 			if(revision_file.exists() && revision_file.isFile())
@@ -210,8 +220,14 @@ public class UnixInstaller
 		{
 			mainFrame.showInfo("status.check_success");
 			mainFrame.setStatus("status.ready", 100);
-			mainFrame.setCanStart(true);
+			mainFrame.setCanStart();
 		}
+	}
+
+	private void displayMainFrame()
+	{
+		FORCE_QUICK_AUTOSTART = false;
+		mainFrame.setVisible(true);
 	}
 
 	public void launchGame()
@@ -232,12 +248,6 @@ public class UnixInstaller
 
 	private void start() throws InterruptedException
 	{
-		/*
-		 * We unfortunately must initialize another JVM in order to launch the game due to -XstartOnFirstThread being required on
-		 * macOS implementations of lwjgl3. This parameter is fundamentally incompatible with AWT used for our UI
-		 *
-		 * This also fixes any working directory issues which may arise
-		 */
 		List<String> final_args = new ArrayList<>();
 
 		final_args.add(jrePath);
@@ -268,8 +278,8 @@ public class UnixInstaller
 		pb.directory(new File(pokemmoDir));
 		pb.inheritIO();
 
-		// Used by KDE to xdg-portal file dialogues, but we do not have a native file dialogue available at this time
-//		pb.environment().put("GTK_USE_PORTALS", "1");
+		// Used by KDE to xdg-portal file dialogues
+		pb.environment().put("GTK_USE_PORTALS", "1");
 		pb.environment().put("POKEMMO_UNIX_LAUNCHER_VER", Integer.toString(INSTALLER_VERSION));
 
 		if(snapcraft != null)
@@ -682,6 +692,8 @@ public class UnixInstaller
 		return stackTraceStringWriter.toString();
 	}
 
+	public static boolean FORCE_QUICK_AUTOSTART = true;
+
 	public static void main(String[] args)
 	{
 		Config.load();
@@ -697,6 +709,15 @@ public class UnixInstaller
 
 		Runtime.getRuntime().addShutdownHook(new Thread(Config::save));
 		UIManager.getLookAndFeelDefaults().put("defaultFont", new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
+		for(String arg : args)
+		{
+			if(arg.equals("--force-ui"))
+			{
+				FORCE_QUICK_AUTOSTART = false;
+				break;
+			}
+		}
 
 		new UnixInstaller().run();
 	}

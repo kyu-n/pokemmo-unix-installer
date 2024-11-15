@@ -27,7 +27,6 @@ public class Config
 	public static final int NETWORK_THREADS_MAX = 4;
 
 	public static int NETWORK_THREADS = 4;
-	public static boolean AUTO_START = false;
 
 	public static UpdateChannel UPDATE_CHANNEL = UpdateChannel.live;
 
@@ -67,8 +66,6 @@ public class Config
 				NETWORK_THREADS = NETWORK_THREADS_MAX;
 			}
 
-			AUTO_START = Boolean.parseBoolean(props.getProperty("auto_start", "false"));
-
 			HARD_MAX_MEMORY_MB = Short.parseShort(props.getProperty("max_mem_hard", "512"));
 
 			if(HARD_MAX_MEMORY_MB < JOPTS_XMX_VAL_MIN)
@@ -104,7 +101,6 @@ public class Config
 	{
 		Properties props = new Properties();
 		props.put("network_threads", Integer.toString(NETWORK_THREADS));
-		props.put("auto_start", Boolean.toString(AUTO_START));
 		props.put("update_channel", UPDATE_CHANNEL.toString());
 		props.put("max_mem_hard", Short.toString(HARD_MAX_MEMORY_MB));
 		props.put("active_gc", ACTIVE_GC.toString());

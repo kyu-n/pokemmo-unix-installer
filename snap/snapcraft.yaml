@@ -83,7 +83,6 @@ parts:
       mv build/runtime $CRAFT_PART_INSTALL
     stage-packages:
       - libglu1-mesa
-      - zenity
     build-packages:
       - bellsoft-java21
       - ca-certificates-java

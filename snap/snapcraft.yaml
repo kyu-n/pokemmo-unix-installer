@@ -1,6 +1,6 @@
 name: pokemmo
 title: PokeMMO
-base: core22
+base: core24
 version: '2.0a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
@@ -16,10 +16,10 @@ grade: stable
 confinement: strict
 compression: lzo
 
-architectures:
-  - build-on: arm64
-  - build-on: armhf
-  - build-on: amd64
+platforms:
+  amd64:
+  arm64:
+  armhf:
 
 assumes:
   - snapd2.55
@@ -83,6 +83,7 @@ parts:
       mv build/runtime $CRAFT_PART_INSTALL
     stage-packages:
       - libglu1-mesa
+      - zenity
     build-packages:
       - bellsoft-java21
       - ca-certificates-java

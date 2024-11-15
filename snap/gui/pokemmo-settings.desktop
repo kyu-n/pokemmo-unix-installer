@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=PokeMMO Settings
+Comment=PokeMMO Settings
+Exec=pokemmo --force-ui
+Keywords=game;adventure;multiplayer;online;emulator;monster;battle;
+Terminal=false
+Type=Application
+Icon=${SNAP}/meta/gui/pokemmo.png
+Categories=Game;AdventureGame;Emulator;RolePlaying;

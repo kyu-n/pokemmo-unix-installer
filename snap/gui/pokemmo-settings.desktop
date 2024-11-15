@@ -1,5 +1,15 @@
 [Desktop Entry]
 Name=PokeMMO Settings
+Name[en]=PokeMMO Settings
+Name[fr]=PokeMMO Paramètres
+Name[es]=PokeMMO Configuración
+Name[de]=PokeMMO Einstellungen
+Name[it]=Impostazioni PokeMMO
+Name[fil]=PokeMMO Settings
+Name[zh]=PokeMMO设置
+Name[zh_TW]=PokeMMO設置
+Name[ko]=PokeMMO설정
+Name[ja]=PokeMMO設定
 Comment=PokeMMO Settings
 Exec=pokemmo --force-ui
 Keywords=game;adventure;multiplayer;online;emulator;monster;battle;

@@ -18,8 +18,14 @@ compression: lzo
 
 platforms:
   amd64:
+    build-on: amd64
+    build-for: amd64
   arm64:
+    build-on: [amd64, arm64]
+    build-for: arm64
   armhf:
+    build-on: [amd64, armhf]
+    build-for: armhf
 
 assumes:
   - snapd2.55

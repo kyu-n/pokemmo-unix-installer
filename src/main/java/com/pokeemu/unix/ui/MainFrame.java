@@ -14,7 +14,6 @@ import java.util.stream.Stream;
 
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
-import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
 import com.pokeemu.unix.updater.UpdaterSwingWorker;
@@ -149,28 +148,15 @@ public class MainFrame extends JFrame implements ActionListener
 				config_panel.add(new LocaleAwareLabel("config.title.advanced"));
 				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
 
-				LocaleAwareLabel garbageCollectorLabel = new LocaleAwareLabel("config.mem.java_gc");
-				JComboBox<PokeMMOGC> garbageCollectorList = new JComboBox<>(Stream.of(PokeMMOGC.values()).filter(PokeMMOGC::isEnabled).toArray(PokeMMOGC[]::new));
-				garbageCollectorList.setSelectedItem(Config.ACTIVE_GC);
-
 				LocaleAwareLabel memoryMaxLabel = new LocaleAwareLabel("config.mem.max");
 				SpinnerNumberModel memoryMaxModel = new SpinnerNumberModel(Config.HARD_MAX_MEMORY_MB, Config.JOPTS_XMX_VAL_MIN, Config.JOPTS_XMX_VAL_MAX, 128);
 				JSpinner memoryMaxSpinner = new JSpinner(memoryMaxModel);
-
-				garbageCollectorList.addActionListener((event) ->
-				{
-					Config.ACTIVE_GC = (PokeMMOGC) garbageCollectorList.getSelectedItem();
-					Config.save();
-				});
 
 				memoryMaxSpinner.addChangeListener((event) ->
 				{
 					Config.HARD_MAX_MEMORY_MB = memoryMaxModel.getNumber().shortValue();
 					Config.save();
 				});
-
-				config_panel.add(garbageCollectorLabel);
-				config_panel.add(garbageCollectorList);
 
 				config_panel.add(memoryMaxLabel);
 				config_panel.add(memoryMaxSpinner);

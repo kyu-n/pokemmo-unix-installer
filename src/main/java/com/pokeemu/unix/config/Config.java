@@ -12,7 +12,6 @@ import java.util.Properties;
 import java.util.ResourceBundle;
 
 import com.pokeemu.unix.UnixInstaller;
-import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
 import com.pokeemu.unix.ui.LocaleAwareElementManager;
@@ -32,7 +31,6 @@ public class Config
 
 	public static short HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MIN;
 
-	public static PokeMMOGC ACTIVE_GC = PokeMMOGC.getDefault();
 	public static PokeMMOLocale ACTIVE_LOCALE = PokeMMOLocale.getDefaultLocale();
 	private static ResourceBundle STRINGS = ACTIVE_LOCALE.getStrings();
 
@@ -77,7 +75,6 @@ public class Config
 				HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MAX;
 			}
 
-			ACTIVE_GC = PokeMMOGC.valueOf(props.getProperty("active_gc", "ZGC"));
 			ACTIVE_LOCALE = PokeMMOLocale.getFromString(props.getProperty("launcher_locale"));
 
 			UPDATE_CHANNEL = UpdateChannel.valueOf(props.getProperty("update_channel"));
@@ -89,11 +86,6 @@ public class Config
 			System.out.println("Failed to load configuration file");
 		}
 
-		if(!ACTIVE_GC.is_enabled)
-		{
-			ACTIVE_GC = PokeMMOGC.getDefault();
-		}
-
 		STRINGS = ACTIVE_LOCALE.getStrings();
 	}
 
@@ -103,7 +95,6 @@ public class Config
 		props.put("network_threads", Integer.toString(NETWORK_THREADS));
 		props.put("update_channel", UPDATE_CHANNEL.toString());
 		props.put("max_mem_hard", Short.toString(HARD_MAX_MEMORY_MB));
-		props.put("active_gc", ACTIVE_GC.toString());
 		props.put("launcher_locale", ACTIVE_LOCALE.getLangTag());
 		props.put("networking_corruption_workaround", Boolean.toString(AES_INTRINSICS_WORKAROUND_ENABLED));
 

@@ -22,7 +22,6 @@ import java.util.concurrent.Phaser;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.pokeemu.unix.config.Config;
-import com.pokeemu.unix.enums.PokeMMOGC;
 import com.pokeemu.unix.ui.MainFrame;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdateFile;
@@ -253,20 +252,13 @@ public class UnixInstaller
 		final_args.add(jrePath);
 		final_args.add("-XX:+IgnoreUnrecognizedVMOptions");
 
-		PokeMMOGC active_gc = Config.ACTIVE_GC;
-
-		final_args.add(active_gc.launch_arg);
-		final_args.add("-Xms128M");
-
+		final_args.add("-XX:+UseZGC");
+		final_args.add("-XX:+ZGenerational");
+		final_args.add("-Xms192M");
 		final_args.add("-Xmx" + Config.HARD_MAX_MEMORY_MB + "M");
-
-		if(Config.AES_INTRINSICS_WORKAROUND_ENABLED)
-		{
-			final_args.add("-XX:+UnlockDiagnosticVMOptions");
-			final_args.add("-XX:-UseAESCTRIntrinsics");
-			final_args.add("-XX:-UseAESIntrinsics");
-		}
-
+		final_args.add("-XX:+UnlockDiagnosticVMOptions");
+		final_args.add("-XX:-UseAESCTRIntrinsics");
+		final_args.add("-XX:-UseAESIntrinsics");
 		final_args.add("-Dfile.encoding=UTF-8");
 
 		/*

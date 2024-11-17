@@ -91,5 +91,5 @@ parts:
       - libglu1-mesa
       - zenity
     build-packages:
-      - bellsoft-java21-full
+      - bellsoft-java21
       - ca-certificates-java

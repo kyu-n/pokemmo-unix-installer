@@ -38,4 +38,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: |
-            build/distribution/unix-installer.jar
+            build/libs/unix-installer.jar

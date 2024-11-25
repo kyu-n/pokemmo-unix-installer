@@ -68,6 +68,11 @@ public class UnixInstaller
 	public static final int EXIT_CODE_IO_FAILURE = 2;
 	public static final int EXIT_CODE_UNK_FAILURE = -127;
 
+	/**
+	 * Whether to silently start the game client (without bringing this UI to the front)
+	 */
+	public static boolean QUICK_AUTOSTART = true;
+
 	private MainFrame mainFrame;
 
 	/**
@@ -183,7 +188,7 @@ public class UnixInstaller
 
 		if(firstRun)
 		{
-			if(FORCE_QUICK_AUTOSTART)
+			if(QUICK_AUTOSTART)
 			{
 				displayMainFrame();
 			}
@@ -193,7 +198,7 @@ public class UnixInstaller
 		}
 		else if(!isPokemmoValid())
 		{
-			if(FORCE_QUICK_AUTOSTART)
+			if(QUICK_AUTOSTART)
 			{
 				displayMainFrame();
 			}
@@ -225,7 +230,7 @@ public class UnixInstaller
 
 	private void displayMainFrame()
 	{
-		FORCE_QUICK_AUTOSTART = false;
+		QUICK_AUTOSTART = false;
 		mainFrame.setVisible(true);
 	}
 
@@ -684,8 +689,6 @@ public class UnixInstaller
 		return stackTraceStringWriter.toString();
 	}
 
-	public static boolean FORCE_QUICK_AUTOSTART = true;
-
 	public static void main(String[] args)
 	{
 		Config.load();
@@ -706,7 +709,7 @@ public class UnixInstaller
 		{
 			if(arg.equals("--force-ui"))
 			{
-				FORCE_QUICK_AUTOSTART = false;
+				QUICK_AUTOSTART = false;
 				break;
 			}
 		}

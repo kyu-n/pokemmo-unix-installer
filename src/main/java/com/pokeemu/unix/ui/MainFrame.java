@@ -6,11 +6,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Stream;
 
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
@@ -257,7 +254,7 @@ public class MainFrame extends JFrame implements ActionListener
 		setLocationRelativeTo(null);
 		setTitle(Config.getString("main.title"));
 		setResizable(false);
-		setVisible(!UnixInstaller.FORCE_QUICK_AUTOSTART);
+		setVisible(!UnixInstaller.QUICK_AUTOSTART);
 	}
 
 	@Override
@@ -430,7 +427,7 @@ public class MainFrame extends JFrame implements ActionListener
 	{
 		launchGame.setEnabled(true);
 
-		if(UnixInstaller.FORCE_QUICK_AUTOSTART)
+		if(UnixInstaller.QUICK_AUTOSTART)
 		{
 			parent.launchGame();
 		}

@@ -1,71 +1,42 @@
 package com.pokeemu.unix.ui;
 
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Composite;
+
 import com.pokeemu.unix.config.Config;
 
-import javax.swing.*;
-
 /**
+ * SWT Button that automatically updates when locale changes
+ *
  * @author Kyu
  */
-public class LocaleAwareButton extends JButton implements LocaleAwareInterface
+public class LocaleAwareButton extends Button implements LocaleAwareInterface
 {
-	private String key;
-	private String tooltip;
+	private String textKey;
 
-	public LocaleAwareButton(String key)
+	public LocaleAwareButton(Composite parent, int style)
 	{
-		this.key = key;
-		this.tooltip = "";
-		init(key, null);
-
+		super(parent, style);
 		LocaleAwareElementManager.instance.addElement(this);
 	}
 
-	@Override
-	protected void init(String text, Icon icon)
+	public void setTextKey(String key)
 	{
-		if(text != null)
-		{
-			super.setText(Config.getString(text));
-		}
-
-		// Set the UI
-		updateUI();
-
-		setAlignmentX(LEFT_ALIGNMENT);
-		setAlignmentY(CENTER_ALIGNMENT);
-	}
-
-	@Override
-	public void setTextKey(String key, Object... params)
-	{
-		this.key = key;
-		super.setText(Config.getString(key, params));
-	}
-
-	@Override
-	public void setText(String key)
-	{
-		throw new UnsupportedOperationException("Must use locale-aware constructor");
-	}
-
-	@Override
-	public void setToolTipKey(String key, Object... params)
-	{
-		this.tooltip = key;
-		super.setToolTipText(Config.getString(key, params));
-	}
-
-	@Override
-	public void setToolTipText(String key)
-	{
-		throw new UnsupportedOperationException("Must use locale-aware tooltip constructor");
+		this.textKey = key;
+		updateLocale();
 	}
 
 	@Override
 	public void updateLocale()
 	{
-		super.setText(Config.getString(key));
-		super.setToolTipText(Config.getString(tooltip));
+		if(textKey != null)
+		{
+			setText(Config.getString(textKey));
+		}
+	}
+
+	@Override
+	protected void checkSubclass()
+	{
 	}
 }

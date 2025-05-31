@@ -1,21 +1,20 @@
 package com.pokeemu.unix.ui;
 
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Display;
-import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Group;
 
 import com.pokeemu.unix.config.Config;
 
 /**
- * SWT Label that automatically updates when locale changes
+ * SWT Group that automatically updates when locale changes
  *
  * @author Kyu
  */
-public class LocaleAwareLabel extends Label implements LocaleAwareInterface
+public class LocaleAwareGroup extends Group implements LocaleAwareInterface
 {
 	private String textKey;
 
-	public LocaleAwareLabel(Composite parent, int style)
+	public LocaleAwareGroup(Composite parent, int style)
 	{
 		super(parent, style);
 		LocaleAwareElementManager.instance.addElement(this);

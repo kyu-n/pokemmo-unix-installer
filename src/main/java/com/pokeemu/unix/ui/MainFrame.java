@@ -1,41 +1,50 @@
 package com.pokeemu.unix.ui;
 
-
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.ScrolledComposite;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.FontData;
+import org.eclipse.swt.layout.GridData;
+import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Combo;
+import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.MessageBox;
+import org.eclipse.swt.widgets.ProgressBar;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Spinner;
 
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
-import com.pokeemu.unix.updater.UpdaterSwingWorker;
+import com.pokeemu.unix.updater.UpdaterJob;
 import com.pokeemu.unix.util.Util;
-
-import javax.swing.*;
-import javax.swing.text.DefaultCaret;
 
 /**
  * @author Kyu
  */
-public class MainFrame extends JFrame implements ActionListener
+public class MainFrame
 {
-	private static final Font FONT_MONOSPACED = new Font(Font.MONOSPACED, Font.PLAIN, 14);
-
 	private final UnixInstaller parent;
+	private final Shell shell;
+	private final Display display;
 
 	protected final LocaleAwareLabel status;
-	protected final JLabel dlSpeed;
+	protected final Label dlSpeed;
 
 	protected LocaleAwareButton launchGame;
 	protected LocaleAwareButton configLauncher;
 
-	private final JProgressBar progressBar;
-	private final LocaleAwareTextArea taskOutput;
+	private final ProgressBar progressBar;
+	private final LocaleAwareText taskOutput;
 
 	private final ExecutorService executorService;
 
@@ -44,7 +53,7 @@ public class MainFrame extends JFrame implements ActionListener
 
 	private static MainFrame instance;
 
-	private final JDialog configWindow;
+	private final Shell configWindow;
 
 	public static MainFrame getInstance()
 	{
@@ -57,261 +66,349 @@ public class MainFrame extends JFrame implements ActionListener
 
 		this.parent = parent;
 		this.executorService = Executors.newFixedThreadPool(1);
+		this.display = Display.getDefault();
 
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		shell = new Shell(display);
+		shell.setSize(480, 280);
+		shell.setLayout(new GridLayout(1, false));
 
-		status = new LocaleAwareLabel("main.loading");
-		dlSpeed = new JLabel("");
+		// Set title using locale-aware approach
+		updateShellTitle();
 
-		/**
-		 * Progress Bar initialization
-		 */
+		// Center the shell
+		shell.setLocation(
+				(display.getBounds().width - shell.getSize().x) / 2,
+				(display.getBounds().height - shell.getSize().y) / 2
+		);
+
+		// Top panel with status and progress
+		Composite topPanel = new Composite(shell, SWT.NONE);
+		topPanel.setLayout(new GridLayout(3, false));
+		topPanel.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+
+		status = new LocaleAwareLabel(topPanel, SWT.NONE);
+		status.setTextKey("main.loading");
+		status.setLayoutData(new GridData(SWT.BEGINNING, SWT.CENTER, false, false));
+
+		progressBar = new ProgressBar(topPanel, SWT.SMOOTH);
+		progressBar.setMinimum(0);
+		progressBar.setMaximum(100);
+		progressBar.setSelection(0);
+		progressBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+		dlSpeed = new Label(topPanel, SWT.NONE);
+		dlSpeed.setText("");
+		dlSpeed.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
+
+		// Task output area
+		ScrolledComposite scrolledComposite = new ScrolledComposite(shell, SWT.V_SCROLL | SWT.H_SCROLL | SWT.BORDER);
+		scrolledComposite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+		taskOutput = new LocaleAwareText(scrolledComposite, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP);
+
+		// Set monospace font
+		FontData[] fontData = taskOutput.getFont().getFontData();
+		for(FontData fd : fontData)
 		{
-			progressBar = new JProgressBar(0, 100);
-			progressBar.setValue(0);
-			progressBar.setStringPainted(false);
-			progressBar.setIndeterminate(true);
+			fd.setName("Courier New");
 		}
+		Font monoFont = new Font(display, fontData);
+		taskOutput.setFont(monoFont);
 
-		/**
-		 * TaskOutput text area
-		 */
+		scrolledComposite.setContent(taskOutput);
+		scrolledComposite.setExpandHorizontal(true);
+		scrolledComposite.setExpandVertical(true);
+
+		// Bottom panel with buttons
+		Composite bottomPanel = new Composite(shell, SWT.NONE);
+		bottomPanel.setLayout(new GridLayout(2, false));
+		bottomPanel.setLayoutData(new GridData(SWT.FILL, SWT.BOTTOM, true, false));
+
+		configLauncher = new LocaleAwareButton(bottomPanel, SWT.PUSH);
+		configLauncher.setTextKey("config.title.window");
+		configLauncher.setLayoutData(new GridData(SWT.BEGINNING, SWT.CENTER, false, false));
+		configLauncher.addSelectionListener(new SelectionAdapter()
 		{
-			taskOutput = new LocaleAwareTextArea(5, 20);
-			taskOutput.setMargin(new Insets(5, 5, 5, 5));
-			taskOutput.setEditable(false);
-			taskOutput.setFont(FONT_MONOSPACED);
-
-			DefaultCaret caret = (DefaultCaret) taskOutput.getCaret();
-			caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
-		}
-
-		/**
-		 * Top Bar
-		 */
-		JPanel top_panel = new JPanel();
-		{
-			top_panel.add(status, BorderLayout.WEST);
-			top_panel.add(progressBar, BorderLayout.CENTER);
-			top_panel.add(dlSpeed, BorderLayout.EAST);
-		}
-
-		/**
-		 * Configuration popup window
-		 */
-		configWindow = new JDialog(this, Config.getString("config.title.window"), true);
-		{
-			JPanel config_panel = new JPanel(new GridLayout(10, 2));
-			config_panel.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+			@Override
+			public void widgetSelected(SelectionEvent e)
 			{
-				LocaleAwareLabel localeLabel = new LocaleAwareLabel("config.title.language");
-				JComboBox<PokeMMOLocale> localeList = new JComboBox<>(PokeMMOLocale.ENABLED_LANGUAGES);
-				localeList.setSelectedItem(Config.ACTIVE_LOCALE);
-				localeList.addActionListener((event) -> Config.changeLocale((PokeMMOLocale) localeList.getSelectedItem()));
-
-				if(localeList.getModel().getSize() < 2)
-				{
-					localeList.setEnabled(false);
-				}
-
-				config_panel.add(localeLabel);
-				config_panel.add(localeList);
-
-				LocaleAwareLabel networkThreadsLabel = new LocaleAwareLabel("config.title.dl_threads");
-				SpinnerNumberModel networkThreadsModel = new SpinnerNumberModel(Config.NETWORK_THREADS, 1, Config.NETWORK_THREADS_MAX, 1);
-				JSpinner networkThreadsSpinner = new JSpinner(networkThreadsModel);
-				networkThreadsSpinner.addChangeListener((event) -> {
-					Config.NETWORK_THREADS = networkThreadsModel.getNumber().intValue();
-					Config.save();
-				});
-
-				config_panel.add(networkThreadsLabel);
-				config_panel.add(networkThreadsSpinner);
-
-				LocaleAwareLabel updateChannelLabel = new LocaleAwareLabel("config.title.update_channel");
-				JComboBox<UpdateChannel> updateChannelList = new JComboBox<>(UpdateChannel.values());
-				updateChannelList.setSelectedItem(Config.UPDATE_CHANNEL);
-				updateChannelList.addActionListener((event) -> {
-					Config.UPDATE_CHANNEL = (UpdateChannel) updateChannelList.getSelectedItem();
-					parent.doUpdate(false);
-					Config.save();
-				});
-
-				updateChannelList.setEnabled(UpdateChannel.ENABLED_UPDATE_CHANNELS.length > 1);
-
-				config_panel.add(updateChannelLabel);
-				config_panel.add(updateChannelList);
-
-				config_panel.add(new LocaleAwareLabel("config.title.advanced"));
-				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
-
-				LocaleAwareLabel memoryMaxLabel = new LocaleAwareLabel("config.mem.max");
-				SpinnerNumberModel memoryMaxModel = new SpinnerNumberModel(Config.HARD_MAX_MEMORY_MB, Config.JOPTS_XMX_VAL_MIN, Config.JOPTS_XMX_VAL_MAX, 128);
-				JSpinner memoryMaxSpinner = new JSpinner(memoryMaxModel);
-
-				memoryMaxSpinner.addChangeListener((event) ->
-				{
-					Config.HARD_MAX_MEMORY_MB = memoryMaxModel.getNumber().shortValue();
-					Config.save();
-				});
-
-				config_panel.add(memoryMaxLabel);
-				config_panel.add(memoryMaxSpinner);
-
-				LocaleAwareLabel aesWorkaroundLabel = new LocaleAwareLabel("config.title.networking_corruption_workaround");
-				LocaleAwareCheckbox aesWorkaroundCb = new LocaleAwareCheckbox();
-				aesWorkaroundCb.setSelected(Config.AES_INTRINSICS_WORKAROUND_ENABLED);
-				aesWorkaroundCb.addActionListener((event) -> {
-					Config.AES_INTRINSICS_WORKAROUND_ENABLED = aesWorkaroundCb.isSelected();
-					Config.save();
-				});
-				aesWorkaroundCb.setEnabled(false);
-				aesWorkaroundCb.setToolTipKey("config.networking_corruption_workaround.tooltip");
-
-				config_panel.add(aesWorkaroundLabel);
-				config_panel.add(aesWorkaroundCb);
-
-				LocaleAwareButton openClientFolder = new LocaleAwareButton("config.title.open_client_folder");
-				openClientFolder.addActionListener((event) -> Util.open(parent.getPokemmoDir()));
-
-				config_panel.add(openClientFolder);
-				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
-
-				LocaleAwareButton repairClientFolder = new LocaleAwareButton("config.title.repair_client");
-				repairClientFolder.addActionListener((event) ->
-				{
-					if(showYesNoDialogue(Config.getString("status.game_repair_prompt"), Config.getString("config.title.repair_client")))
-					{
-						configWindow.setVisible(false);
-						new UpdaterSwingWorker(parent, MainFrame.this, true, true).execute();
-					}
-				});
-
-				config_panel.add(repairClientFolder);
-				config_panel.add(new JLabel("")); // Dummy widget to fulfill our column requirements
+				configWindow.setVisible(true);
 			}
+		});
 
-			configWindow.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-			configWindow.add(config_panel);
-			configWindow.setTitle(Config.getString("config.title.window"));
-			configWindow.setSize(500, 340);
-			configWindow.setResizable(false);
+		launchGame = new LocaleAwareButton(bottomPanel, SWT.PUSH);
+		launchGame.setTextKey("main.launch");
+		launchGame.setEnabled(false);
+		launchGame.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
 
-			configWindow.addWindowListener(new WindowListener()
-			{
-				@Override
-				public void windowOpened(WindowEvent e) { }
-				@Override
-				public void windowClosing(WindowEvent e) { }
-				@Override
-				public void windowClosed(WindowEvent e) { }
-				@Override
-				public void windowIconified(WindowEvent e) { }
-				@Override
-				public void windowDeiconified(WindowEvent e) { }
+		// Configuration window
+		configWindow = createConfigWindow();
 
-				@Override
-				public void windowActivated(WindowEvent e)
-				{
-					Point p = MainFrame.this.getLocationOnScreen();
-					configWindow.setLocation(p.x + ((MainFrame.this.getWidth())/2) - 200, p.y + (MainFrame.this.getHeight()/2 - 125));
-				}
+		shell.addDisposeListener(e -> {
+			monoFont.dispose();
+			display.dispose();
+			System.exit(UnixInstaller.EXIT_CODE_SUCCESS);
+		});
 
-				@Override
-				public void windowDeactivated(WindowEvent e)
-				{
-					Config.save();
-				}
-			});
-		}
-
-		/**
-		 * Bottom Bar
-		 */
-		JPanel bottom_panel = new JPanel(new BorderLayout(0, 0));
-		{
-			configLauncher = new LocaleAwareButton("config.title.window");
-			configLauncher.addActionListener((event) -> configWindow.setVisible(true));
-
-			launchGame = new LocaleAwareButton("main.launch");
-			launchGame.setEnabled(false);
-
-			bottom_panel.add(configLauncher, BorderLayout.WEST);
-			bottom_panel.add(launchGame, BorderLayout.EAST);
-		}
-
-		/**
-		 * Add our widgets
-		 */
-		{
-			add(top_panel, BorderLayout.PAGE_START);
-			add(new JScrollPane(taskOutput), BorderLayout.CENTER);
-			add(bottom_panel, BorderLayout.PAGE_END);
-		}
-
-		pack();
-		setSize(480, 280);
-		setLocationRelativeTo(null);
-		setTitle(Config.getString("main.title"));
-		setResizable(false);
-		setVisible(!UnixInstaller.QUICK_AUTOSTART);
+		shell.setVisible(!UnixInstaller.QUICK_AUTOSTART);
 	}
 
-	@Override
-	public void actionPerformed(ActionEvent e)
+	private void updateShellTitle()
 	{
-		if("exit".equals(e.getActionCommand()))
+		shell.setText(Config.getString("main.title"));
+	}
+
+	private Shell createConfigWindow()
+	{
+		Shell configShell = new Shell(shell, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+		configShell.setSize(500, 340);
+		configShell.setLayout(new GridLayout(1, false));
+
+		// Update config window title
+		updateConfigWindowTitle(configShell);
+
+		// Center config window relative to main window
+		configShell.setLocation(
+				shell.getLocation().x + (shell.getSize().x - configShell.getSize().x) / 2,
+				shell.getLocation().y + (shell.getSize().y - configShell.getSize().y) / 2
+		);
+
+		Composite configContent = new Composite(configShell, SWT.NONE);
+		configContent.setLayout(new GridLayout(2, false));
+		configContent.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+		// Language setting
+		LocaleAwareLabel localeLabel = new LocaleAwareLabel(configContent, SWT.NONE);
+		localeLabel.setTextKey("config.title.language");
+
+		Combo localeCombo = new Combo(configContent, SWT.READ_ONLY);
+		for(PokeMMOLocale locale : PokeMMOLocale.ENABLED_LANGUAGES)
 		{
-			System.exit(UnixInstaller.EXIT_CODE_SUCCESS);
+			localeCombo.add(locale.toString());
 		}
+		localeCombo.select(getLocaleIndex(Config.ACTIVE_LOCALE));
+		localeCombo.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				Config.changeLocale(PokeMMOLocale.ENABLED_LANGUAGES[localeCombo.getSelectionIndex()]);
+				// Update all locale-aware elements
+				LocaleAwareElementManager.instance.updateElements();
+				// Update shell titles manually since they're not in the manager
+				updateShellTitle();
+				updateConfigWindowTitle(configShell);
+			}
+		});
+		if(PokeMMOLocale.ENABLED_LANGUAGES.length < 2)
+		{
+			localeCombo.setEnabled(false);
+		}
+
+		// Network threads setting
+		LocaleAwareLabel networkThreadsLabel = new LocaleAwareLabel(configContent, SWT.NONE);
+		networkThreadsLabel.setTextKey("config.title.dl_threads");
+
+		Spinner networkThreadsSpinner = new Spinner(configContent, SWT.BORDER);
+		networkThreadsSpinner.setMinimum(1);
+		networkThreadsSpinner.setMaximum(Config.NETWORK_THREADS_MAX);
+		networkThreadsSpinner.setSelection(Config.NETWORK_THREADS);
+		networkThreadsSpinner.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				Config.NETWORK_THREADS = networkThreadsSpinner.getSelection();
+				Config.save();
+			}
+		});
+
+		// Update channel setting
+		LocaleAwareLabel updateChannelLabel = new LocaleAwareLabel(configContent, SWT.NONE);
+		updateChannelLabel.setTextKey("config.title.update_channel");
+
+		Combo updateChannelCombo = new Combo(configContent, SWT.READ_ONLY);
+		for(UpdateChannel channel : UpdateChannel.values())
+		{
+			updateChannelCombo.add(channel.toString());
+		}
+		updateChannelCombo.select(getUpdateChannelIndex(Config.UPDATE_CHANNEL));
+		updateChannelCombo.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				Config.UPDATE_CHANNEL = UpdateChannel.values()[updateChannelCombo.getSelectionIndex()];
+				parent.doUpdate(false);
+				Config.save();
+			}
+		});
+		updateChannelCombo.setEnabled(UpdateChannel.ENABLED_UPDATE_CHANNELS.length > 1);
+
+		// Advanced section
+		LocaleAwareGroup advancedGroup = new LocaleAwareGroup(configContent, SWT.NONE);
+		advancedGroup.setTextKey("config.title.advanced");
+		advancedGroup.setLayout(new GridLayout(2, false));
+		GridData advancedData = new GridData(SWT.FILL, SWT.TOP, true, false);
+		advancedData.horizontalSpan = 2;
+		advancedGroup.setLayoutData(advancedData);
+
+		// Memory setting
+		LocaleAwareLabel memoryMaxLabel = new LocaleAwareLabel(advancedGroup, SWT.NONE);
+		memoryMaxLabel.setTextKey("config.mem.max");
+
+		Spinner memoryMaxSpinner = new Spinner(advancedGroup, SWT.BORDER);
+		memoryMaxSpinner.setMinimum(Config.JOPTS_XMX_VAL_MIN);
+		memoryMaxSpinner.setMaximum(Config.JOPTS_XMX_VAL_MAX);
+		memoryMaxSpinner.setIncrement(128);
+		memoryMaxSpinner.setSelection(Config.HARD_MAX_MEMORY_MB);
+		memoryMaxSpinner.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				Config.HARD_MAX_MEMORY_MB = (short) memoryMaxSpinner.getSelection();
+				Config.save();
+			}
+		});
+
+		// AES workaround setting
+		LocaleAwareLabel aesWorkaroundLabel = new LocaleAwareLabel(advancedGroup, SWT.NONE);
+		aesWorkaroundLabel.setTextKey("config.title.networking_corruption_workaround");
+
+		Button aesWorkaroundCheck = new Button(advancedGroup, SWT.CHECK);
+		aesWorkaroundCheck.setSelection(Config.AES_INTRINSICS_WORKAROUND_ENABLED);
+		aesWorkaroundCheck.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				Config.AES_INTRINSICS_WORKAROUND_ENABLED = aesWorkaroundCheck.getSelection();
+				Config.save();
+			}
+		});
+		aesWorkaroundCheck.setEnabled(false);
+		aesWorkaroundCheck.setToolTipText(Config.getString("config.networking_corruption_workaround.tooltip"));
+
+		// Action buttons
+		LocaleAwareButton openClientFolder = new LocaleAwareButton(advancedGroup, SWT.PUSH);
+		openClientFolder.setTextKey("config.title.open_client_folder");
+		openClientFolder.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				Util.open(parent.getPokemmoDir());
+			}
+		});
+
+		LocaleAwareButton repairClientFolder = new LocaleAwareButton(advancedGroup, SWT.PUSH);
+		repairClientFolder.setTextKey("config.title.repair_client");
+		repairClientFolder.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				if(showYesNoDialogue(Config.getString("status.game_repair_prompt"), Config.getString("config.title.repair_client")))
+				{
+					configShell.setVisible(false);
+					new UpdaterJob(parent, MainFrame.this, true, true).schedule();
+				}
+			}
+		});
+
+		return configShell;
+	}
+
+	private void updateConfigWindowTitle(Shell configShell)
+	{
+		configShell.setText(Config.getString("config.title.window"));
+	}
+
+	private int getLocaleIndex(PokeMMOLocale locale)
+	{
+		for(int i = 0; i < PokeMMOLocale.ENABLED_LANGUAGES.length; i++)
+		{
+			if(PokeMMOLocale.ENABLED_LANGUAGES[i] == locale)
+			{
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	private int getUpdateChannelIndex(UpdateChannel channel)
+	{
+		for(int i = 0; i < UpdateChannel.values().length; i++)
+		{
+			if(UpdateChannel.values()[i] == channel)
+			{
+				return i;
+			}
+		}
+		return 0;
+	}
+
+	public Shell getShell()
+	{
+		return shell;
 	}
 
 	public void setStatus(final String string, int progress, Object... params)
 	{
-		if(!SwingUtilities.isEventDispatchThread())
-			SwingUtilities.invokeLater(() -> status.setTextKey(string));
-		else
+		if(Display.getCurrent() != null)
+		{
 			status.setTextKey(string);
+		}
+		else
+		{
+			display.asyncExec(() -> status.setTextKey(string));
+		}
 
 		addDetail(string, progress, params);
 	}
 
 	public void addDetail(final String string, final int progress, Object... params)
 	{
-		if(!SwingUtilities.isEventDispatchThread())
-			SwingUtilities.invokeLater(() -> addDetailPrivate(string, progress, params));
-		else
+		if(Display.getCurrent() != null)
+		{
 			addDetailPrivate(string, progress, params);
+		}
+		else
+		{
+			display.asyncExec(() -> addDetailPrivate(string, progress, params));
+		}
 	}
 
 	protected void addDetailPrivate(String string, int progress, Object... params)
 	{
 		if(progress > 0)
 		{
-			progressBar.setIndeterminate(false);
-			progressBar.setValue(progress);
-		}
-		else
-		{
-			progressBar.setIndeterminate(true);
-			progressBar.setValue(progress);
+			progressBar.setSelection(progress);
 		}
 
 		if(string != null)
 		{
-			taskOutput.appendLocaleStr(string, params);
+			taskOutput.appendLocaleStr(string);
 			taskOutput.appendLocaleStr("\n");
+
+			// Auto-scroll to bottom
+			taskOutput.setTopIndex(taskOutput.getLineCount() - 1);
 		}
 
-		validate();
+		shell.layout(true, true);
 	}
 
 	public void updateDLSpeed(final long bytes_per_second)
 	{
-		if(!SwingUtilities.isEventDispatchThread())
-			SwingUtilities.invokeLater(() -> dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s"));
-		else
+		if(Display.getCurrent() != null)
+		{
 			dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s");
+		}
+		else
+		{
+			display.asyncExec(() -> dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s"));
+		}
 	}
 
 	public static String humanReadableByteCount(long bytes, boolean si)
@@ -330,7 +427,7 @@ public class MainFrame extends JFrame implements ActionListener
 
 	public void showMessage(String message, String window_title, Runnable runnable)
 	{
-		showMessage(message, window_title, JOptionPane.INFORMATION_MESSAGE, runnable);
+		showMessage(message, window_title, SWT.ICON_INFORMATION, runnable);
 	}
 
 	public void showError(String message, String window_title)
@@ -340,22 +437,22 @@ public class MainFrame extends JFrame implements ActionListener
 
 	public void showError(String message, String window_title, Runnable runnable)
 	{
-		showMessage(message, window_title, JOptionPane.ERROR_MESSAGE, runnable);
+		showMessage(message, window_title, SWT.ICON_ERROR, runnable);
 	}
 
 	public void showErrorWithStacktrace(String message, String window_title, String stacktrace, Runnable runnable)
 	{
-		showMessageWithTextArea(message, window_title, stacktrace, JOptionPane.ERROR_MESSAGE, runnable);
+		showMessageWithTextArea(message, window_title, stacktrace, SWT.ICON_ERROR, runnable);
 	}
 
 	public void showErrorWithStacktrace(String message, String window_title, Throwable throwable, Runnable runnable)
 	{
-		showMessageWithTextArea(message, window_title, parent.getStacktraceString(throwable), JOptionPane.ERROR_MESSAGE, runnable);
+		showMessageWithTextArea(message, window_title, parent.getStacktraceString(throwable), SWT.ICON_ERROR, runnable);
 	}
 
 	public void showErrorWithStacktrace(String message, String window_title, Throwable[] throwables, Runnable runnable)
 	{
-		showMessageWithTextArea(message, window_title, parent.getStacktraceString(throwables), JOptionPane.ERROR_MESSAGE, runnable);
+		showMessageWithTextArea(message, window_title, parent.getStacktraceString(throwables), SWT.ICON_ERROR, runnable);
 	}
 
 	public void showInfo(String message, Object... params)
@@ -365,32 +462,80 @@ public class MainFrame extends JFrame implements ActionListener
 
 	public boolean showYesNoDialogue(String message, String window_title)
 	{
-		return JOptionPane.showConfirmDialog(this, message, window_title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+		MessageBox messageBox = new MessageBox(shell, SWT.YES | SWT.NO | SWT.ICON_WARNING);
+		messageBox.setMessage(message);
+		messageBox.setText(window_title);
+		return messageBox.open() == SWT.YES;
 	}
 
-	public void showMessage(String message, String window_title, int information_code, Runnable runnable)
+	public void showMessage(String message, String window_title, int style, Runnable runnable)
 	{
-		JOptionPane.showMessageDialog(this, message, window_title, information_code);
+		if(Display.getCurrent() != null)
+		{
+			MessageBox messageBox = new MessageBox(shell, SWT.OK | style);
+			messageBox.setMessage(message);
+			messageBox.setText(window_title);
+			messageBox.open();
+		}
+		else
+		{
+			display.asyncExec(() -> {
+				MessageBox messageBox = new MessageBox(shell, SWT.OK | style);
+				messageBox.setMessage(message);
+				messageBox.setText(window_title);
+				messageBox.open();
+			});
+		}
+
 		if(runnable != null)
 			executorService.execute(runnable);
 	}
 
-	public void showMessageWithTextArea(String message, String window_title, String textAreaContents, int information_code, Runnable runnable)
+	public void showMessageWithTextArea(String message, String window_title, String textAreaContents, int style, Runnable runnable)
 	{
-		JPanel jp = new JPanel();
-		jp.setLayout(new BorderLayout(0, 20));
+		Runnable showDialog = () -> {
+			Shell dialogShell = new Shell(shell, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+			dialogShell.setText(window_title);
+			dialogShell.setSize(500, 300);
+			dialogShell.setLayout(new GridLayout(1, false));
 
-		JTextArea jta = new JTextArea(textAreaContents);
-		JScrollPane scroll = new JScrollPane(jta);
+			Label messageLabel = new Label(dialogShell, SWT.WRAP);
+			messageLabel.setText(message);
+			messageLabel.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
-		scroll.setPreferredSize(new Dimension(500, 200));
-		JLabel msg = new JLabel(message);
-		msg.setHorizontalAlignment(JLabel.LEFT);
+			LocaleAwareText textArea = new LocaleAwareText(dialogShell, SWT.MULTI | SWT.READ_ONLY | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
+			textArea.setText(textAreaContents);
+			textArea.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
-		jp.add(msg, BorderLayout.PAGE_START);
-		jp.add(scroll, BorderLayout.CENTER);
+			LocaleAwareButton okButton = new LocaleAwareButton(dialogShell, SWT.PUSH);
+			okButton.setTextKey("button.ok");
+			okButton.setLayoutData(new GridData(SWT.CENTER, SWT.BOTTOM, false, false));
+			okButton.addSelectionListener(new SelectionAdapter()
+			{
+				@Override
+				public void widgetSelected(SelectionEvent e)
+				{
+					dialogShell.dispose();
+				}
+			});
 
-		JOptionPane.showMessageDialog(this, jp, window_title, information_code);
+			dialogShell.setDefaultButton(okButton);
+			dialogShell.setLocation(
+					shell.getLocation().x + (shell.getSize().x - dialogShell.getSize().x) / 2,
+					shell.getLocation().y + (shell.getSize().y - dialogShell.getSize().y) / 2
+			);
+
+			dialogShell.open();
+		};
+
+		if(Display.getCurrent() != null)
+		{
+			showDialog.run();
+		}
+		else
+		{
+			display.asyncExec(showDialog);
+		}
 
 		if(runnable != null)
 			executorService.execute(runnable);
@@ -425,7 +570,14 @@ public class MainFrame extends JFrame implements ActionListener
 
 	public void setCanStart()
 	{
-		launchGame.setEnabled(true);
+		if(Display.getCurrent() != null)
+		{
+			launchGame.setEnabled(true);
+		}
+		else
+		{
+			display.asyncExec(() -> launchGame.setEnabled(true));
+		}
 
 		if(UnixInstaller.QUICK_AUTOSTART)
 		{
@@ -433,7 +585,14 @@ public class MainFrame extends JFrame implements ActionListener
 		}
 		else
 		{
-			launchGame.addActionListener((event) -> parent.launchGame());
+			launchGame.addSelectionListener(new SelectionAdapter()
+			{
+				@Override
+				public void widgetSelected(SelectionEvent e)
+				{
+					parent.launchGame();
+				}
+			});
 		}
 	}
 }

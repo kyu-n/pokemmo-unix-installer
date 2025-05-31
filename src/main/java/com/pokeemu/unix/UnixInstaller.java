@@ -19,17 +19,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatLightLaf;
+import org.eclipse.swt.widgets.Display;
+
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.ui.MainFrame;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdateFile;
-import com.pokeemu.unix.updater.UpdaterSwingWorker;
-import com.pokeemu.unix.util.GnomeThemeDetector;
+import com.pokeemu.unix.updater.UpdaterJob;
 import com.pokeemu.unix.util.Util;
-
-import javax.swing.*;
 
 /**
  * PokeMMO Unix Installer
@@ -71,7 +68,7 @@ public class UnixInstaller
 	/**
 	 * Whether to silently start the game client (without bringing this UI to the front)
 	 */
-	public static boolean QUICK_AUTOSTART = true;
+	public static boolean QUICK_AUTOSTART = false;
 
 	private MainFrame mainFrame;
 
@@ -137,7 +134,14 @@ public class UnixInstaller
 		pokemmoDir = pokemmo_data_home + fileSeparator + "pokemmo-client-" + Config.UPDATE_CHANNEL.toString() + fileSeparator;
 
 		jrePath = System.getProperty("java.home") + fileSeparator + "bin" + fileSeparator + "java";
-		mainFrame = new MainFrame(this);
+		try
+		{
+			mainFrame = new MainFrame(this);
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
 
 		String version = System.getProperty("java.specification.version");
 
@@ -180,11 +184,11 @@ public class UnixInstaller
 			return;
 		}
 
-		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
-		{
-			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-			return;
-		}
+//		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
+//		{
+//			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+//			return;
+//		}
 
 		if(firstRun)
 		{
@@ -194,7 +198,7 @@ public class UnixInstaller
 			}
 
 			createSymlinkedDirectories();
-			new UpdaterSwingWorker(this, mainFrame, false, false).execute();
+			new UpdaterJob(this, mainFrame, false, false).schedule();
 		}
 		else if(!isPokemmoValid())
 		{
@@ -218,7 +222,7 @@ public class UnixInstaller
 			}
 
 			// If our declared revision is invalid, repair
-			new UpdaterSwingWorker(this, mainFrame, (revision <= 0 || (FeedManager.MIN_REVISION > 0 && revision >= FeedManager.MIN_REVISION)), false).execute();
+			new UpdaterJob(this, mainFrame, (revision <= 0 || (FeedManager.MIN_REVISION > 0 && revision >= FeedManager.MIN_REVISION)), false).schedule();
 		}
 		else
 		{
@@ -231,7 +235,7 @@ public class UnixInstaller
 	private void displayMainFrame()
 	{
 		QUICK_AUTOSTART = false;
-		mainFrame.setVisible(true);
+		Display.getDefault().asyncExec(() -> mainFrame.getShell().setVisible(true));
 	}
 
 	public void launchGame()
@@ -305,6 +309,11 @@ public class UnixInstaller
 
 	private void checkForRunning()
 	{
+		if(true)
+		{
+			return;
+		}
+
 		/*
 		 * It's safe to assume that only one process may use this processes's JRE, and it should be sufficient to query if any other processes are running from the current directory
 		 * This is not usable on Windows due to the potential for shared JREs/JDKs, but the approach works on macOS due to the app format and Linux due to Snapcraft / Flatpak isolation
@@ -693,17 +702,10 @@ public class UnixInstaller
 	{
 		Config.load();
 
-		if(GnomeThemeDetector.isDark())
-		{
-			FlatDarkLaf.setup();
-		}
-		else
-		{
-			FlatLightLaf.setup();
-		}
+		// Initialize SWT Display
+		Display display = new Display();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(Config::save));
-		UIManager.getLookAndFeelDefaults().put("defaultFont", new Font(Font.SANS_SERIF, Font.PLAIN, 14));
 
 		for(String arg : args)
 		{
@@ -714,6 +716,18 @@ public class UnixInstaller
 			}
 		}
 
-		new UnixInstaller().run();
+		UnixInstaller installer = new UnixInstaller();
+		installer.run();
+
+		// SWT event loop
+		while(!display.getShells()[0].isDisposed())
+		{
+			if(!display.readAndDispatch())
+			{
+				display.sleep();
+			}
+		}
+
+		display.dispose();
 	}
 }

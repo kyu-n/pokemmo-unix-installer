@@ -402,6 +402,11 @@ public class UnixInstaller
 				continue;
 			}
 
+			if(isNativeLibraryForOtherPlatform(file.name))
+			{
+				continue;
+			}
+
 			String checksum_sha256 = file.sha256;
 			String actual_sha256 = Util.calculateHash("SHA-256", f);
 
@@ -412,6 +417,25 @@ public class UnixInstaller
 		}
 
 		return invalidFiles.isEmpty();
+	}
+
+	private boolean isNativeLibraryForOtherPlatform(String filename)
+	{
+		// Only process native library files
+		if(!filename.startsWith("lib/native/"))
+		{
+			return false;
+		}
+
+		// Only allow linux64 native libraries
+		if(filename.contains("/angle/") ||
+				filename.contains("/lwjgl/") ||
+				filename.contains("/native/"))
+		{
+			return !filename.contains("linux64");
+		}
+
+		return false;
 	}
 
 	public void doUpdate(boolean repair)
@@ -446,6 +470,11 @@ public class UnixInstaller
 		for(UpdateFile file : FeedManager.getFiles())
 		{
 			if(!file.shouldDownload())
+			{
+				continue;
+			}
+
+			if(isNativeLibraryForOtherPlatform(file.name))
 			{
 				continue;
 			}

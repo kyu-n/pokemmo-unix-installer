@@ -123,7 +123,7 @@ public class Config
 		STRINGS = target.getStrings();
 		save();
 
-		LocaleAwareElementManager.instance.updateElements();
+		LocaleAwareElementManager.instance.updateAll();
 	}
 
 	private static String getConfigHome()

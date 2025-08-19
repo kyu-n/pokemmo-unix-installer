@@ -1,7 +1,6 @@
 package com.pokeemu.unix.ui;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import static com.pokeemu.unix.ui.LocaleAwareElementManager.*;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.ScrolledComposite;
@@ -15,11 +14,13 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ProgressBar;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
+import org.eclipse.swt.widgets.Text;
 
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
@@ -28,32 +29,25 @@ import com.pokeemu.unix.enums.UpdateChannel;
 import com.pokeemu.unix.updater.UpdaterJob;
 import com.pokeemu.unix.util.Util;
 
-/**
- * @author Kyu
- */
 public class MainFrame
 {
 	private final UnixInstaller parent;
 	private final Shell shell;
 	private final Display display;
 
-	protected final LocaleAwareLabel status;
+	protected final Label status;
 	protected final Label dlSpeed;
-
-	protected LocaleAwareButton launchGame;
-	protected LocaleAwareButton configLauncher;
+	protected Button launchGame;
+	protected Button configLauncher;
 
 	private final ProgressBar progressBar;
-	private final LocaleAwareText taskOutput;
-
-	private final ExecutorService executorService;
-
-	private int downloaded_bytes;
-	private long last_download_progress_update = System.currentTimeMillis(), last_download_speed_update, last_download_speed_update_bytes;
+	private final Text taskOutput;
 
 	private static MainFrame instance;
 
-	private final Shell configWindow;
+	private volatile Shell configWindow;
+	private final Object configLock = new Object();
+	private final Font monoFont;
 
 	public static MainFrame getInstance()
 	{
@@ -65,15 +59,15 @@ public class MainFrame
 		instance = this;
 
 		this.parent = parent;
-		this.executorService = Executors.newFixedThreadPool(1);
 		this.display = Display.getDefault();
 
 		shell = new Shell(display);
+		shell.setMinimumSize(480, 280);
 		shell.setSize(480, 280);
 		shell.setLayout(new GridLayout(1, false));
 
-		// Set title using locale-aware approach
-		updateShellTitle();
+		// Bind shell title to locale - this also registers the shell for relayout
+		bindShellTitle(shell, "main.title");
 
 		// Center the shell
 		shell.setLocation(
@@ -86,8 +80,7 @@ public class MainFrame
 		topPanel.setLayout(new GridLayout(3, false));
 		topPanel.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
-		status = new LocaleAwareLabel(topPanel, SWT.NONE);
-		status.setTextKey("main.loading");
+		status = createLabel(topPanel, SWT.NONE, "main.loading");
 		status.setLayoutData(new GridData(SWT.BEGINNING, SWT.CENTER, false, false));
 
 		progressBar = new ProgressBar(topPanel, SWT.SMOOTH);
@@ -104,7 +97,7 @@ public class MainFrame
 		ScrolledComposite scrolledComposite = new ScrolledComposite(shell, SWT.V_SCROLL | SWT.H_SCROLL | SWT.BORDER);
 		scrolledComposite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
-		taskOutput = new LocaleAwareText(scrolledComposite, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP);
+		taskOutput = createText(scrolledComposite, SWT.MULTI | SWT.READ_ONLY | SWT.WRAP);
 
 		// Set monospace font
 		FontData[] fontData = taskOutput.getFont().getFontData();
@@ -112,7 +105,7 @@ public class MainFrame
 		{
 			fd.setName("Courier New");
 		}
-		Font monoFont = new Font(display, fontData);
+		monoFont = new Font(display, fontData);
 		taskOutput.setFont(monoFont);
 
 		scrolledComposite.setContent(taskOutput);
@@ -124,28 +117,40 @@ public class MainFrame
 		bottomPanel.setLayout(new GridLayout(2, false));
 		bottomPanel.setLayoutData(new GridData(SWT.FILL, SWT.BOTTOM, true, false));
 
-		configLauncher = new LocaleAwareButton(bottomPanel, SWT.PUSH);
-		configLauncher.setTextKey("config.title.window");
+		configLauncher = createButton(bottomPanel, SWT.PUSH, "config.title.window");
 		configLauncher.setLayoutData(new GridData(SWT.BEGINNING, SWT.CENTER, false, false));
 		configLauncher.addSelectionListener(new SelectionAdapter()
 		{
 			@Override
 			public void widgetSelected(SelectionEvent e)
 			{
-				configWindow.setVisible(true);
+				getConfigWindow().setVisible(true);
 			}
 		});
 
-		launchGame = new LocaleAwareButton(bottomPanel, SWT.PUSH);
-		launchGame.setTextKey("main.launch");
+		launchGame = createButton(bottomPanel, SWT.PUSH, "main.launch");
 		launchGame.setEnabled(false);
 		launchGame.setLayoutData(new GridData(SWT.END, SWT.CENTER, false, false));
-
-		// Configuration window
-		configWindow = createConfigWindow();
+		launchGame.addSelectionListener(new SelectionAdapter()
+		{
+			@Override
+			public void widgetSelected(SelectionEvent e)
+			{
+				parent.launchGame();
+			}
+		});
 
 		shell.addDisposeListener(e -> {
-			monoFont.dispose();
+			if(!monoFont.isDisposed())
+			{
+				monoFont.dispose();
+			}
+
+			if(configWindow != null && !configWindow.isDisposed())
+			{
+				configWindow.dispose();
+			}
+
 			display.dispose();
 			System.exit(UnixInstaller.EXIT_CODE_SUCCESS);
 		});
@@ -153,19 +158,30 @@ public class MainFrame
 		shell.setVisible(!UnixInstaller.QUICK_AUTOSTART);
 	}
 
-	private void updateShellTitle()
+	private Shell getConfigWindow()
 	{
-		shell.setText(Config.getString("main.title"));
+		if(configWindow == null || configWindow.isDisposed())
+		{
+			synchronized(configLock)
+			{
+				if(configWindow == null || configWindow.isDisposed())
+				{
+					configWindow = createConfigWindow();
+				}
+			}
+		}
+		return configWindow;
 	}
 
 	private Shell createConfigWindow()
 	{
 		Shell configShell = new Shell(shell, SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+		configShell.setMinimumSize(500, 340); // Set minimum size
 		configShell.setSize(500, 340);
 		configShell.setLayout(new GridLayout(1, false));
 
-		// Update config window title
-		updateConfigWindowTitle(configShell);
+		// Bind config window title - this also registers for relayout
+		bindShellTitle(configShell, "config.title.window");
 
 		// Center config window relative to main window
 		configShell.setLocation(
@@ -178,14 +194,14 @@ public class MainFrame
 		configContent.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
 		// Language setting
-		LocaleAwareLabel localeLabel = new LocaleAwareLabel(configContent, SWT.NONE);
-		localeLabel.setTextKey("config.title.language");
+		createLabel(configContent, SWT.NONE, "config.title.language");
 
 		Combo localeCombo = new Combo(configContent, SWT.READ_ONLY);
 		for(PokeMMOLocale locale : PokeMMOLocale.ENABLED_LANGUAGES)
 		{
 			localeCombo.add(locale.toString());
 		}
+
 		localeCombo.select(getLocaleIndex(Config.ACTIVE_LOCALE));
 		localeCombo.addSelectionListener(new SelectionAdapter()
 		{
@@ -193,21 +209,38 @@ public class MainFrame
 			public void widgetSelected(SelectionEvent e)
 			{
 				Config.changeLocale(PokeMMOLocale.ENABLED_LANGUAGES[localeCombo.getSelectionIndex()]);
-				// Update all locale-aware elements
-				LocaleAwareElementManager.instance.updateElements();
-				// Update shell titles manually since they're not in the manager
-				updateShellTitle();
-				updateConfigWindowTitle(configShell);
+				LocaleAwareElementManager.instance.updateAll();
+
+				// Re-center windows after relayout
+				Display.getDefault().asyncExec(() -> {
+					// Re-center main window
+					if(!shell.isDisposed())
+					{
+						shell.setLocation(
+								(display.getBounds().width - shell.getSize().x) / 2,
+								(display.getBounds().height - shell.getSize().y) / 2
+						);
+					}
+
+					// Re-center config window relative to main
+					if(!configShell.isDisposed())
+					{
+						configShell.setLocation(
+								shell.getLocation().x + (shell.getSize().x - configShell.getSize().x) / 2,
+								shell.getLocation().y + (shell.getSize().y - configShell.getSize().y) / 2
+						);
+					}
+				});
 			}
 		});
+
 		if(PokeMMOLocale.ENABLED_LANGUAGES.length < 2)
 		{
 			localeCombo.setEnabled(false);
 		}
 
 		// Network threads setting
-		LocaleAwareLabel networkThreadsLabel = new LocaleAwareLabel(configContent, SWT.NONE);
-		networkThreadsLabel.setTextKey("config.title.dl_threads");
+		createLabel(configContent, SWT.NONE, "config.title.dl_threads");
 
 		Spinner networkThreadsSpinner = new Spinner(configContent, SWT.BORDER);
 		networkThreadsSpinner.setMinimum(1);
@@ -224,8 +257,7 @@ public class MainFrame
 		});
 
 		// Update channel setting
-		LocaleAwareLabel updateChannelLabel = new LocaleAwareLabel(configContent, SWT.NONE);
-		updateChannelLabel.setTextKey("config.title.update_channel");
+		createLabel(configContent, SWT.NONE, "config.title.update_channel");
 
 		Combo updateChannelCombo = new Combo(configContent, SWT.READ_ONLY);
 		for(UpdateChannel channel : UpdateChannel.values())
@@ -246,16 +278,14 @@ public class MainFrame
 		updateChannelCombo.setEnabled(UpdateChannel.ENABLED_UPDATE_CHANNELS.length > 1);
 
 		// Advanced section
-		LocaleAwareGroup advancedGroup = new LocaleAwareGroup(configContent, SWT.NONE);
-		advancedGroup.setTextKey("config.title.advanced");
+		Group advancedGroup = createGroup(configContent, SWT.NONE, "config.title.advanced");
 		advancedGroup.setLayout(new GridLayout(2, false));
 		GridData advancedData = new GridData(SWT.FILL, SWT.TOP, true, false);
 		advancedData.horizontalSpan = 2;
 		advancedGroup.setLayoutData(advancedData);
 
 		// Memory setting
-		LocaleAwareLabel memoryMaxLabel = new LocaleAwareLabel(advancedGroup, SWT.NONE);
-		memoryMaxLabel.setTextKey("config.mem.max");
+		createLabel(advancedGroup, SWT.NONE, "config.mem.max");
 
 		Spinner memoryMaxSpinner = new Spinner(advancedGroup, SWT.BORDER);
 		memoryMaxSpinner.setMinimum(Config.JOPTS_XMX_VAL_MIN);
@@ -273,8 +303,7 @@ public class MainFrame
 		});
 
 		// AES workaround setting
-		LocaleAwareLabel aesWorkaroundLabel = new LocaleAwareLabel(advancedGroup, SWT.NONE);
-		aesWorkaroundLabel.setTextKey("config.title.networking_corruption_workaround");
+		createLabel(advancedGroup, SWT.NONE, "config.title.networking_corruption_workaround");
 
 		Button aesWorkaroundCheck = new Button(advancedGroup, SWT.CHECK);
 		aesWorkaroundCheck.setSelection(Config.AES_INTRINSICS_WORKAROUND_ENABLED);
@@ -288,11 +317,10 @@ public class MainFrame
 			}
 		});
 		aesWorkaroundCheck.setEnabled(false);
-		aesWorkaroundCheck.setToolTipText(Config.getString("config.networking_corruption_workaround.tooltip"));
+		bindTooltip(aesWorkaroundCheck, "config.networking_corruption_workaround.tooltip");
 
 		// Action buttons
-		LocaleAwareButton openClientFolder = new LocaleAwareButton(advancedGroup, SWT.PUSH);
-		openClientFolder.setTextKey("config.title.open_client_folder");
+		Button openClientFolder = createButton(advancedGroup, SWT.PUSH, "config.title.open_client_folder");
 		openClientFolder.addSelectionListener(new SelectionAdapter()
 		{
 			@Override
@@ -302,8 +330,7 @@ public class MainFrame
 			}
 		});
 
-		LocaleAwareButton repairClientFolder = new LocaleAwareButton(advancedGroup, SWT.PUSH);
-		repairClientFolder.setTextKey("config.title.repair_client");
+		Button repairClientFolder = createButton(advancedGroup, SWT.PUSH, "config.title.repair_client");
 		repairClientFolder.addSelectionListener(new SelectionAdapter()
 		{
 			@Override
@@ -318,11 +345,6 @@ public class MainFrame
 		});
 
 		return configShell;
-	}
-
-	private void updateConfigWindowTitle(Shell configShell)
-	{
-		configShell.setText(Config.getString("config.title.window"));
 	}
 
 	private int getLocaleIndex(PokeMMOLocale locale)
@@ -358,11 +380,11 @@ public class MainFrame
 	{
 		if(Display.getCurrent() != null)
 		{
-			status.setTextKey(string);
+			status.setText(Config.getString(string, params));
 		}
 		else
 		{
-			display.asyncExec(() -> status.setTextKey(string));
+			display.asyncExec(() -> status.setText(Config.getString(string, params)));
 		}
 
 		addDetail(string, progress, params);
@@ -389,35 +411,14 @@ public class MainFrame
 
 		if(string != null)
 		{
-			taskOutput.appendLocaleStr(string);
-			taskOutput.appendLocaleStr("\n");
+			appendLocalizedText(taskOutput, string, params);
+			taskOutput.append("\n");
 
 			// Auto-scroll to bottom
 			taskOutput.setTopIndex(taskOutput.getLineCount() - 1);
 		}
 
 		shell.layout(true, true);
-	}
-
-	public void updateDLSpeed(final long bytes_per_second)
-	{
-		if(Display.getCurrent() != null)
-		{
-			dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s");
-		}
-		else
-		{
-			display.asyncExec(() -> dlSpeed.setText(humanReadableByteCount(bytes_per_second, false) + "/s"));
-		}
-	}
-
-	public static String humanReadableByteCount(long bytes, boolean si)
-	{
-		int unit = si ? 1000 : 1024;
-		if(bytes < unit) return bytes + " B";
-		int exp = (int) (Math.log(bytes) / Math.log(unit));
-		String pre = (si ? "kMGTPE" : "KMGTPE").charAt(exp - 1) + (si ? "" : "i");
-		return String.format("%.1f %sB", bytes / Math.pow(unit, exp), pre);
 	}
 
 	public void showMessage(String message, String window_title)
@@ -470,25 +471,26 @@ public class MainFrame
 
 	public void showMessage(String message, String window_title, int style, Runnable runnable)
 	{
-		if(Display.getCurrent() != null)
-		{
+		Runnable showMsg = () -> {
 			MessageBox messageBox = new MessageBox(shell, SWT.OK | style);
 			messageBox.setMessage(message);
 			messageBox.setText(window_title);
 			messageBox.open();
+		};
+
+		if(Display.getCurrent() != null)
+		{
+			showMsg.run();
 		}
 		else
 		{
-			display.asyncExec(() -> {
-				MessageBox messageBox = new MessageBox(shell, SWT.OK | style);
-				messageBox.setMessage(message);
-				messageBox.setText(window_title);
-				messageBox.open();
-			});
+			display.syncExec(showMsg);
 		}
 
 		if(runnable != null)
-			executorService.execute(runnable);
+		{
+			display.asyncExec(runnable);
+		}
 	}
 
 	public void showMessageWithTextArea(String message, String window_title, String textAreaContents, int style, Runnable runnable)
@@ -503,12 +505,11 @@ public class MainFrame
 			messageLabel.setText(message);
 			messageLabel.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
-			LocaleAwareText textArea = new LocaleAwareText(dialogShell, SWT.MULTI | SWT.READ_ONLY | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
+			Text textArea = createText(dialogShell, SWT.MULTI | SWT.READ_ONLY | SWT.BORDER | SWT.V_SCROLL | SWT.H_SCROLL);
 			textArea.setText(textAreaContents);
 			textArea.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
-			LocaleAwareButton okButton = new LocaleAwareButton(dialogShell, SWT.PUSH);
-			okButton.setTextKey("button.ok");
+			Button okButton = createButton(dialogShell, SWT.PUSH, "button.ok");
 			okButton.setLayoutData(new GridData(SWT.CENTER, SWT.BOTTOM, false, false));
 			okButton.addSelectionListener(new SelectionAdapter()
 			{
@@ -534,37 +535,12 @@ public class MainFrame
 		}
 		else
 		{
-			display.asyncExec(showDialog);
+			display.syncExec(showDialog);
 		}
 
 		if(runnable != null)
-			executorService.execute(runnable);
-	}
-
-	public void showDownloadProgress(int bytes)
-	{
-		downloaded_bytes += bytes;
-
-		if(System.currentTimeMillis() - last_download_progress_update > 100)
 		{
-			last_download_progress_update = System.currentTimeMillis();
-		}
-
-		if(last_download_speed_update == 0)
-		{
-			last_download_speed_update = System.currentTimeMillis();
-		}
-
-		if(System.currentTimeMillis() - last_download_speed_update > 1000)
-		{
-			last_download_speed_update = System.currentTimeMillis();
-
-			if(last_download_speed_update_bytes > 0)
-			{
-				updateDLSpeed(downloaded_bytes - last_download_speed_update_bytes);
-			}
-
-			last_download_speed_update_bytes = downloaded_bytes;
+			display.asyncExec(runnable);
 		}
 	}
 
@@ -582,17 +558,6 @@ public class MainFrame
 		if(UnixInstaller.QUICK_AUTOSTART)
 		{
 			parent.launchGame();
-		}
-		else
-		{
-			launchGame.addSelectionListener(new SelectionAdapter()
-			{
-				@Override
-				public void widgetSelected(SelectionEvent e)
-				{
-					parent.launchGame();
-				}
-			});
 		}
 	}
 }

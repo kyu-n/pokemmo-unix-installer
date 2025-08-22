@@ -38,12 +38,12 @@ package-repositories:
     url: https://apt.bell-sw.com/
 
 apps:
-  pokemmo:
-    command: runtime/bin/java -jar $SNAP/jar/unix-installer.jar
+  game:
+    command: bin/swt-launcher
     extensions: [ gnome ]
     plugs:
       - network
-      - opengl
+      - network-bind
       - home
       - joystick
       - audio-playback
@@ -53,29 +53,40 @@ apps:
       - x11
       - unity7
       - removable-media
+      - gsettings
     environment:
       JAVA_HOME: "$SNAP/runtime"
       PATH: "$JAVA_HOME/bin/:$PATH"
-      _JAVA_OPTIONS: '-Dfile.encoding="UTF-8"'
+      _JAVA_OPTIONS: '-Dfile.encoding="UTF-8" -Djava.library.path="$SNAP/usr/lib/jni:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET"'
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       GTK_USE_PORTAL: '1'
       POKEMMO_IS_SNAPPED: '1'
+      LD_LIBRARY_PATH: "$SNAP/usr/lib/jni:$SNAP/usr/lib/$CRAFT_ARCH_TRIPLET:$LD_LIBRARY_PATH"
+
 parts:
+  swt-launcher:
+    plugin: dump
+    source: snap/local
+    source-type: local
+    organize:
+      swt-launcher: bin/swt-launcher
+
   gradle:
     plugin: nil
     override-pull: |
-      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-8.10.2-bin.zip -o gradle-8.10.2-bin.zip && mv $CRAFT_PART_SRC/gradle-8.10.2-bin.zip $CRAFT_STAGE
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-8.14.3-bin.zip -o gradle-8.14.3-bin.zip && mv $CRAFT_PART_SRC/gradle-8.14.3-bin.zip $CRAFT_STAGE
     build-packages:
       - curl
-  pokemmo:
+
+  game:
     after: [ gradle ]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
     source-type: git
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |
-      craftctl default && cp $CRAFT_STAGE/gradle-8.10.2-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-8.10.2-bin.zip
+      craftctl default && cp $CRAFT_STAGE/gradle-8.14.3-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-8.14.3-bin.zip
     override-build: |
       set -x
       case "$CRAFT_ARCH_BUILD_FOR" in
@@ -88,8 +99,31 @@ parts:
       cp build/libs/unix-installer.jar $CRAFT_PART_INSTALL/jar/unix-installer.jar && \
       mv build/runtime $CRAFT_PART_INSTALL
     stage-packages:
-      - libglu1-mesa
+      # SWT GTK3 dependencies (modern distributions)
+      - libgtk-3-0
+      - libgdk-pixbuf2.0-0
+      - libglib2.0-0
+      - libcairo-gobject2
+      - libpango-1.0-0
+      - libatk1.0-0
+      # X11 support for SWT
+      - libx11-6
+      - libxext6
+      - libxrender1
+      - libxtst6
+      - libxi6
+      - libxrandr2
+      - libxss1
+      # SWT GTK3 native libraries (modern distributions)
+      - libswt-gtk-4-java
+      - libswt-gtk-4-jni
+      # Other utilities
       - zenity
     build-packages:
       - bellsoft-java21
       - ca-certificates-java
+    prime:
+      - -usr/include
+      - -usr/lib/**/cmake
+      - -usr/share/doc
+      - -usr/share/man

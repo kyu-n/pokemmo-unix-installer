@@ -1,0 +1,35 @@
+#!/bin/bash
+# snap/local/unix-launcher
+
+# Detect architecture and set SWT library paths
+ARCH=$(uname -m)
+case $ARCH in
+  x86_64)
+    SWT_ARCH="x86_64"
+    ARCH_TRIPLET="x86_64-linux-gnu"
+    ;;
+  aarch64)
+    SWT_ARCH="aarch64"
+    ARCH_TRIPLET="aarch64-linux-gnu"
+    ;;
+  armv7l)
+    SWT_ARCH="armhf"
+    ARCH_TRIPLET="arm-linux-gnueabihf"
+    ;;
+  *)
+    echo "Unsupported architecture: $ARCH"
+    exit 1
+    ;;
+esac
+
+# Set up SWT-specific library paths
+export SWT_LIBRARY_PATH="$SNAP/usr/lib/jni"
+export LD_LIBRARY_PATH="$SWT_LIBRARY_PATH:$SNAP/usr/lib/$ARCH_TRIPLET:$LD_LIBRARY_PATH"
+
+# Java options for SWT
+JAVA_OPTS="-Djava.library.path=$SWT_LIBRARY_PATH:$SNAP/usr/lib/$ARCH_TRIPLET"
+JAVA_OPTS="$JAVA_OPTS -Dswt.library.path=$SWT_LIBRARY_PATH"
+JAVA_OPTS="$JAVA_OPTS -Dfile.encoding=UTF-8"
+
+# Launch the application
+exec "$JAVA_HOME/bin/java" $JAVA_OPTS -jar "$SNAP/jar/unix-installer.jar" "$@"

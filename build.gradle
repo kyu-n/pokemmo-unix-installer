@@ -7,12 +7,24 @@ apply plugin: "java-library"
 apply plugin: "eclipse"
 apply plugin: "idea"
 
-// TODO: Remove this hack- These natives will not survive build on aarch64
+// Simple architecture detection for SWT
+def swtArch = System.getenv('CRAFT_ARCH_BUILD_FOR') ?: System.getProperty('os.arch')
+def swtPlatform = [
+        'amd64': 'gtk.linux.x86_64',
+        'x86_64': 'gtk.linux.x86_64',
+        'arm64': 'gtk.linux.aarch64',
+        'aarch64': 'gtk.linux.aarch64',
+        'armhf': 'gtk.linux.arm',
+        'arm': 'gtk.linux.arm'
+][swtArch] ?: 'gtk.linux.x86_64'
+
+logger.info("Building for architecture: ${swtArch} -> SWT platform: ${swtPlatform}")
+
 configurations.configureEach {
     resolutionStrategy {
         eachDependency {
             if (requested.name.contains('${osgi.platform}')) {
-                useTarget requested.toString().replace('${osgi.platform}', 'gtk.linux.x86_64')
+                useTarget requested.toString().replace('${osgi.platform}', swtPlatform)
             }
         }
     }
@@ -74,6 +86,7 @@ jar {
         configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
     }
 }
+
 task dist(type: GradleBuild) {
     buildName "dist"
     startParameter.projectProperties = gradle.startParameter.projectProperties

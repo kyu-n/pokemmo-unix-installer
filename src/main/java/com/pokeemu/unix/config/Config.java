@@ -14,7 +14,6 @@ import java.util.ResourceBundle;
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
-import com.pokeemu.unix.ui.LocaleAwareElementManager;
 
 /**
  * @author Kyu
@@ -22,14 +21,14 @@ import com.pokeemu.unix.ui.LocaleAwareElementManager;
 public class Config
 {
 	public static final short JOPTS_XMX_VAL_MIN = 384;
-	public static final short JOPTS_XMX_VAL_MAX = 1024;
+	public static final short JOPTS_XMX_VAL_MAX = 1536;
 	public static final int NETWORK_THREADS_MAX = 4;
 
 	public static int NETWORK_THREADS = 4;
 
 	public static UpdateChannel UPDATE_CHANNEL = UpdateChannel.live;
 
-	public static short HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MIN;
+	public static short HARD_MAX_MEMORY_MB = 512;
 
 	public static PokeMMOLocale ACTIVE_LOCALE = PokeMMOLocale.getDefaultLocale();
 	private static ResourceBundle STRINGS = ACTIVE_LOCALE.getStrings();
@@ -122,8 +121,6 @@ public class Config
 		ACTIVE_LOCALE = target;
 		STRINGS = target.getStrings();
 		save();
-
-		LocaleAwareElementManager.instance.updateElements();
 	}
 
 	private static String getConfigHome()
@@ -159,10 +156,5 @@ public class Config
 		{
 			return "[" + key + "]";
 		}
-	}
-
-	public static boolean hasString(String key)
-	{
-		return STRINGS.containsKey(key);
 	}
 }

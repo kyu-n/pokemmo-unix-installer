@@ -38,7 +38,7 @@ public class GnomeThemeDetector
 				}
 			}
 		}
-		catch(IOException e)
+		catch(Exception e)
 		{
 			System.out.println("Couldn't detect GNOME theme");
 			e.printStackTrace();

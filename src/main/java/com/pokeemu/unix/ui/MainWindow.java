@@ -2,9 +2,9 @@ package com.pokeemu.unix.ui;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
@@ -18,11 +18,11 @@ public class MainWindow
 	private final UnixInstaller parent;
 	private final ImGuiThreadBridge threadBridge;
 
-	private final ConcurrentLinkedDeque<TaskLine> taskLines = new ConcurrentLinkedDeque<>();
+	private final List<TaskLine> taskLines = new ArrayList<>();
+	private final ReadWriteLock taskLinesLock = new ReentrantReadWriteLock();
 	private final AtomicBoolean canStart = new AtomicBoolean(false);
 
-	// Use atomic counter for task line count
-	private final AtomicInteger taskLineCount = new AtomicInteger(0);
+	private final AtomicBoolean needsScrollToBottom = new AtomicBoolean(false);
 
 	private final int windowWidth;
 	private final int windowHeight;
@@ -36,8 +36,6 @@ public class MainWindow
 	private static final float[] COLOR_WARNING = {1.0f, 0.8f, 0.3f, 1.0f};
 	private static final float[] COLOR_SUCCESS = {0.3f, 1.0f, 0.3f, 1.0f};
 	private static final float[] COLOR_INFO = {0.7f, 0.7f, 1.0f, 1.0f};
-
-	private boolean needsScrollToBottom = false;
 
 	private static class TaskLine
 	{
@@ -140,38 +138,70 @@ public class MainWindow
 		if(ImGui.beginChild("##TaskOutput", 0, availableHeight, true,
 				ImGuiWindowFlags.HorizontalScrollbar | ImGuiWindowFlags.AlwaysVerticalScrollbar))
 		{
+			TaskSnapshot snapshot = processAndGetSnapshot();
 
-			processNewTaskLines();
-			trimOldLines();
-			renderTaskLines();
+			renderTaskLines(snapshot.lines);
 
-			if(needsScrollToBottom)
+			if(snapshot.shouldScroll)
 			{
 				ImGui.setScrollHereY(1.0f);
-				needsScrollToBottom = false;
 			}
 		}
 		ImGui.endChild();
 	}
 
-	private void processNewTaskLines()
+	/**
+	 * Container for snapshot data with associated scroll state
+	 */
+	private static class TaskSnapshot
+	{
+		final List<TaskLine> lines;
+		final boolean shouldScroll;
+
+		TaskSnapshot(List<TaskLine> lines, boolean shouldScroll)
+		{
+			this.lines = lines;
+			this.shouldScroll = shouldScroll;
+		}
+	}
+
+	/**
+	 * Process new task lines and return a snapshot for rendering.
+	 * This method handles all list operations atomically under lock.
+	 */
+	private TaskSnapshot processAndGetSnapshot()
 	{
 		List<String> newLines = threadBridge.getAndClearTaskOutput();
-		if(!newLines.isEmpty())
-		{
-			for(String line : newLines)
-			{
-				if(line != null && !line.trim().isEmpty())
-				{
-					LogLevel level = determineLogLevel(line);
-					TaskLine taskLine = new TaskLine(line, level);
 
-					// Atomically add line and increment counter
-					taskLines.addLast(taskLine);
-					taskLineCount.incrementAndGet();
+		taskLinesLock.writeLock().lock();
+		try
+		{
+			if(!newLines.isEmpty())
+			{
+				for(String line : newLines)
+				{
+					if(line != null && !line.trim().isEmpty())
+					{
+						LogLevel level = determineLogLevel(line);
+						TaskLine taskLine = new TaskLine(line, level);
+						taskLines.add(taskLine);
+					}
 				}
+				needsScrollToBottom.set(true);
 			}
-			needsScrollToBottom = true;
+
+			while(taskLines.size() > MAX_TASK_LINES)
+			{
+				taskLines.removeFirst();
+			}
+
+			boolean shouldScroll = needsScrollToBottom.getAndSet(false);
+
+			return new TaskSnapshot(new ArrayList<>(taskLines), shouldScroll);
+		}
+		finally
+		{
+			taskLinesLock.writeLock().unlock();
 		}
 	}
 
@@ -196,33 +226,9 @@ public class MainWindow
 		}
 	}
 
-	private void trimOldLines()
-	{
-		// Use atomic counter for thread-safe size check
-		int currentCount = taskLineCount.get();
-
-		while(currentCount > MAX_TASK_LINES)
-		{
-			TaskLine removed = taskLines.pollFirst();
-			if(removed != null)
-			{
-				currentCount = taskLineCount.decrementAndGet();
-			}
-			else
-			{
-				// Queue is empty, reset counter
-				taskLineCount.set(0);
-				break;
-			}
-		}
-	}
-
-	private void renderTaskLines()
+	private void renderTaskLines(List<TaskLine> snapshot)
 	{
 		ImGui.pushStyleVar(imgui.flag.ImGuiStyleVar.ItemSpacing, 0, 2);
-
-		// Create a snapshot for rendering to avoid concurrent modification issues
-		List<TaskLine> snapshot = new ArrayList<>(taskLines);
 
 		for(TaskLine taskLine : snapshot)
 		{
@@ -326,9 +332,16 @@ public class MainWindow
 
 	public void clearTaskOutput()
 	{
-		taskLines.clear();
-		taskLineCount.set(0);
-		needsScrollToBottom = false;
+		taskLinesLock.writeLock().lock();
+		try
+		{
+			taskLines.clear();
+			needsScrollToBottom.set(false);
+		}
+		finally
+		{
+			taskLinesLock.writeLock().unlock();
+		}
 	}
 
 	public void addTaskLine(String line)
@@ -338,17 +351,22 @@ public class MainWindow
 			LogLevel level = determineLogLevel(line);
 			TaskLine taskLine = new TaskLine(line, level);
 
-			// Atomically add and track count
-			taskLines.addLast(taskLine);
-			int newCount = taskLineCount.incrementAndGet();
-
-			// Trim if needed
-			if(newCount > MAX_TASK_LINES)
+			taskLinesLock.writeLock().lock();
+			try
 			{
-				trimOldLines();
-			}
+				taskLines.add(taskLine);
 
-			needsScrollToBottom = true;
+				while(taskLines.size() > MAX_TASK_LINES)
+				{
+					taskLines.removeFirst();
+				}
+
+				needsScrollToBottom.set(true);
+			}
+			finally
+			{
+				taskLinesLock.writeLock().unlock();
+			}
 		}
 	}
 }

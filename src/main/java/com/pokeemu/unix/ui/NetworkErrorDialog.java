@@ -4,7 +4,6 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.pokeemu.unix.UnixInstaller;
 
@@ -15,27 +14,30 @@ import imgui.flag.ImGuiWindowFlags;
 /**
  * A dialog UI component for displaying network-related error information to the user.
  * This dialog appears when a network connection failure occurs during installation or update.
- *
- * @author Kyu
  */
 public class NetworkErrorDialog
 {
 	private static final String POPUP_ID = "##NetworkErrorDialog";
-	private volatile boolean visible = false;
+
+	private enum DialogState
+	{
+		CLOSED,
+		OPENING,
+		OPEN
+	}
+
+	private volatile DialogState dialogState = DialogState.CLOSED;
 	private String errorMessage;
 	private String stackTrace;
 	private final UnixInstaller parent;
 
-	// Prevent multiple show calls from creating duplicate dialogs
-	private final AtomicBoolean isShowing = new AtomicBoolean(false);
-	private volatile boolean wasVisible = false;
+	private final Object showLock = new Object();
+	private volatile boolean isCurrentlyShowing = false;
 
-	// Match config window dimensions
 	private static final int WINDOW_WIDTH = 363;
 	private static final int WINDOW_HEIGHT = 251;
 	private static final float BUTTON_HEIGHT = 25.0f;
 
-	// Track if we've copied to clipboard for user feedback
 	private boolean justCopied = false;
 	private long copiedTime = 0;
 
@@ -51,11 +53,13 @@ public class NetworkErrorDialog
 			return;
 		}
 
-		// Prevent multiple simultaneous show calls
-		if(!isShowing.compareAndSet(false, true))
+		synchronized(showLock)
 		{
-			// Already showing or preparing to show
-			return;
+			if(isCurrentlyShowing)
+			{
+				return;
+			}
+			isCurrentlyShowing = true;
 		}
 
 		try
@@ -70,54 +74,47 @@ public class NetworkErrorDialog
 			exception.printStackTrace(pw);
 			this.stackTrace = sw.toString();
 
-			// Close StringWriter and PrintWriter
 			pw.close();
 			try
 			{
 				sw.close();
 			}
-			catch(Exception e)
+			catch(Exception ignored)
 			{
-				// Ignore
 			}
 
-			this.visible = true;
+			this.dialogState = DialogState.OPENING;
 			this.justCopied = false;
 		}
-		finally
+		catch(Exception e)
 		{
-			// Reset the showing flag after setup is complete
-			isShowing.set(false);
+			System.err.println("Failed to setup network error dialog: " + e.getMessage());
+			synchronized(showLock)
+			{
+				isCurrentlyShowing = false;
+			}
 		}
 	}
 
 	public void render()
 	{
-		if(!visible)
+		switch(dialogState)
 		{
-			// If we were visible last frame, ensure popup is closed
-			if(wasVisible)
-			{
-				if(ImGui.isPopupOpen(POPUP_ID))
-				{
-					ImGui.closeCurrentPopup();
-				}
-				wasVisible = false;
-			}
-			return;
+			case CLOSED:
+				return;
+
+			case OPENING:
+				ImGui.openPopup(POPUP_ID);
+				dialogState = DialogState.OPEN;
+				break;
+
+			case OPEN:
+				break;
 		}
 
-		// Check if we should clear the "Copied!" feedback
 		if(justCopied && System.currentTimeMillis() - copiedTime > 2000)
 		{
 			justCopied = false;
-		}
-
-		// Open popup only when transitioning from not visible to visible
-		if(!wasVisible)
-		{
-			ImGui.openPopup(POPUP_ID);
-			wasVisible = true;
 		}
 
 		ImVec2 center = ImGui.getMainViewport().getCenter();
@@ -128,11 +125,9 @@ public class NetworkErrorDialog
 				ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoTitleBar))
 		{
 
-			// Custom title bar
 			renderCustomTitleBar();
 			ImGui.separator();
 
-			// Error message section
 			ImGui.spacing();
 			ImGui.text("Error:");
 			ImGui.indent();
@@ -145,15 +140,12 @@ public class NetworkErrorDialog
 			ImGui.separator();
 			ImGui.spacing();
 
-			// Technical details in scrollable area
 			ImGui.text("Technical Details:");
 
-			// Calculate available height for scroll area
 			float currentY = ImGui.getCursorPosY();
 			float bottomReserve = BUTTON_HEIGHT + ImGui.getStyle().getItemSpacingY() * 4 + 10;
 			float availableHeight = WINDOW_HEIGHT - currentY - bottomReserve;
 
-			// Scrollable area for stack trace
 			if(ImGui.beginChild("##StackTraceScroll", 0, availableHeight, true,
 					ImGuiWindowFlags.HorizontalScrollbar))
 			{
@@ -163,22 +155,18 @@ public class NetworkErrorDialog
 
 			ImGui.separator();
 
-			// Action buttons
 			renderActionButtons();
 
 			ImGui.endPopup();
 		}
 		else
 		{
-			// Popup was closed externally (shouldn't happen with modal, but handle it)
-			visible = false;
-			wasVisible = false;
+			closeDialog();
 		}
 	}
 
 	private void renderCustomTitleBar()
 	{
-		// Red error icon and title
 		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.3f, 0.3f, 1.0f);
 		String titleText = "Network Error";
 		float titleWidth = ImGui.calcTextSize(titleText).x;
@@ -194,13 +182,11 @@ public class NetworkErrorDialog
 		float buttonWidth = 100.0f;
 		float spacing = ImGui.getStyle().getItemSpacingX();
 
-		// Three buttons with equal spacing
 		float totalWidth = buttonWidth * 3 + spacing * 2;
 		float startX = (WINDOW_WIDTH - totalWidth) * 0.5f;
 
 		ImGui.setCursorPosX(startX);
 
-		// Copy button - show feedback if recently copied
 		if(justCopied)
 		{
 			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button, 0.0f, 0.5f, 0.0f, 1.0f);
@@ -220,7 +206,6 @@ public class NetworkErrorDialog
 
 		ImGui.sameLine();
 
-		// Retry button
 		if(ImGui.button("Retry", buttonWidth, BUTTON_HEIGHT))
 		{
 			closeDialog();
@@ -229,7 +214,6 @@ public class NetworkErrorDialog
 
 		ImGui.sameLine();
 
-		// Exit button with red styling
 		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button, 0.5f, 0.0f, 0.0f, 1.0f);
 		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered, 0.7f, 0.0f, 0.0f, 1.0f);
 		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonActive, 0.4f, 0.0f, 0.0f, 1.0f);
@@ -242,9 +226,13 @@ public class NetworkErrorDialog
 
 	private void closeDialog()
 	{
-		visible = false;
-		wasVisible = false;
+		dialogState = DialogState.CLOSED;
 		ImGui.closeCurrentPopup();
+
+		synchronized(showLock)
+		{
+			isCurrentlyShowing = false;
+		}
 	}
 
 	private void copyToClipboard()
@@ -274,6 +262,6 @@ public class NetworkErrorDialog
 
 	public boolean isVisible()
 	{
-		return visible;
+		return dialogState != DialogState.CLOSED;
 	}
 }

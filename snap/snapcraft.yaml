@@ -23,9 +23,6 @@ platforms:
   arm64:
     build-on: arm64
     build-for: arm64
-  armhf:
-    build-on: armhf
-    build-for: armhf
 
 assumes:
   - snapd2.55
@@ -65,7 +62,7 @@ parts:
   gradle:
     plugin: nil
     override-pull: |
-      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-8.10.2-bin.zip -o gradle-8.10.2-bin.zip && mv $CRAFT_PART_SRC/gradle-8.10.2-bin.zip $CRAFT_STAGE
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-8.14.3-bin.zip -o gradle-8.14.3-bin.zip && mv $CRAFT_PART_SRC/gradle-8.14.3-bin.zip $CRAFT_STAGE
     build-packages:
       - curl
   pokemmo:
@@ -75,13 +72,12 @@ parts:
     source-type: git
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |
-      craftctl default && cp $CRAFT_STAGE/gradle-8.10.2-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-8.10.2-bin.zip
+      craftctl default && cp $CRAFT_STAGE/gradle-8.14.3-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-8.14.3-bin.zip
     override-build: |
       set -x
       case "$CRAFT_ARCH_BUILD_FOR" in
         amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-amd64" ;;
         arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-aarch64" ;;
-        armhf) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-arm32-vfp-hflt" ;;
       esac && \
       ./gradlew assemble && \
       mkdir $CRAFT_PART_INSTALL/jar && \

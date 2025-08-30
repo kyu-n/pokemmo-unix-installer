@@ -12,7 +12,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.ibm.icu.text.UnicodeSet;
 import com.pokeemu.unix.config.Config;
@@ -24,36 +23,23 @@ import imgui.ImFontConfig;
 import imgui.ImGui;
 import imgui.ImGuiIO;
 
-/**
- * @author Kyu
- */
 public class LocalizationManager
 {
 	private static final LocalizationManager INSTANCE = new LocalizationManager();
 	public static final LocalizationManager instance = INSTANCE;
 
 	private volatile PokeMMOLocale currentLocale;
-	private ImFont mainFont;
-
-	// Track font push/pop state for safety
-	private final AtomicInteger fontPushCount = new AtomicInteger(0);
 
 	private final Map<String, String> stringCache = new HashMap<>();
 
 	private static final float DEFAULT_FONT_SIZE = 16.0f;
 	private static final String MAIN_FONT_RESOURCE = "/fonts/NotoSansCJK-Medium.ttc";
 
-	// Cache the computed ranges so we only calculate once
 	private short[] cachedGlyphRanges = null;
 
 	private LocalizationManager()
 	{
 		updateLocale();
-	}
-
-	public static LocalizationManager getInstance()
-	{
-		return INSTANCE;
 	}
 
 	public void initializeFonts()
@@ -71,10 +57,9 @@ public class LocalizationManager
 			fontConfig.setOversampleV(1);
 			fontConfig.setPixelSnapH(true);
 
-			// Generate optimized glyph ranges from actual resource content
 			short[] glyphRanges = getOptimizedGlyphRanges();
 
-			mainFont = loadFontFromResource(fontAtlas, fontConfig, glyphRanges);
+			ImFont mainFont = loadFontFromResource(fontAtlas, fontConfig, glyphRanges);
 
 			if(mainFont == null)
 			{
@@ -83,15 +68,10 @@ public class LocalizationManager
 			}
 
 			fontAtlas.build();
-
-			if(mainFont != null)
-			{
-				io.setFontDefault(mainFont);
-			}
+			io.setFontDefault(mainFont);
 		}
 		finally
 		{
-			// Ensure font config is destroyed even if exception occurs
 			fontConfig.destroy();
 		}
 	}
@@ -101,24 +81,19 @@ public class LocalizationManager
 	 */
 	private short[] getOptimizedGlyphRanges()
 	{
-		// Return cached ranges if already computed
 		if(cachedGlyphRanges != null)
 		{
 			return cachedGlyphRanges;
 		}
 
-		// Build a UnicodeSet containing all characters from all resource bundles
 		UnicodeSet allChars = new UnicodeSet();
 
-		// Always include basic ASCII and common punctuation
-		allChars.add(0x0020, 0x007E); // Basic ASCII printable
+		allChars.add(0x0020, 0x007E);
 
-		// Common symbols and punctuation that might appear in user input
-		allChars.add(0x00A0, 0x00FF); // Latin-1 Supplement
-		allChars.add(0x2000, 0x206F); // General Punctuation
-		allChars.add(0x20A0, 0x20CF); // Currency Symbols
+		allChars.add(0x00A0, 0x00FF);
+		allChars.add(0x2000, 0x206F);
+		allChars.add(0x20A0, 0x20CF);
 
-		// Scan all enabled locales for characters
 		for(PokeMMOLocale locale : PokeMMOLocale.ENABLED_LANGUAGES)
 		{
 			try
@@ -126,7 +101,6 @@ public class LocalizationManager
 				ResourceBundle bundle = locale.getStrings();
 				if(bundle == null) continue;
 
-				// Iterate through all keys and values
 				Enumeration<String> keys = bundle.getKeys();
 				while(keys.hasMoreElements())
 				{
@@ -134,19 +108,16 @@ public class LocalizationManager
 					try
 					{
 						String value = bundle.getString(key);
-						// Add all characters from the value
 						for(int i = 0; i < value.length(); i++)
 						{
 							allChars.add(value.charAt(i));
 						}
 					}
-					catch(MissingResourceException e)
+					catch(MissingResourceException ignored)
 					{
-						// Skip missing keys
 					}
 				}
 
-				// Also add characters from the locale's display name
 				String displayName = locale.getDisplayName();
 				if(displayName != null)
 				{
@@ -163,7 +134,6 @@ public class LocalizationManager
 			}
 		}
 
-		// Convert UnicodeSet to optimized ranges for ImGui
 		cachedGlyphRanges = convertUnicodeSetToRanges(allChars);
 
 		System.out.println("Generated font ranges covering " + allChars.size() + " unique characters");
@@ -178,14 +148,12 @@ public class LocalizationManager
 	{
 		List<Short> ranges = new ArrayList<>();
 
-		// Get the ranges from UnicodeSet
 		int rangeCount = unicodeSet.getRangeCount();
 		for(int i = 0; i < rangeCount; i++)
 		{
 			int start = unicodeSet.getRangeStart(i);
 			int end = unicodeSet.getRangeEnd(i);
 
-			// ImGui uses unsigned short, so cap at 0xFFFF
 			if(start > 0xFFFF) break;
 			if(end > 0xFFFF) end = 0xFFFF;
 
@@ -193,10 +161,8 @@ public class LocalizationManager
 			ranges.add((short) end);
 		}
 
-		// Add terminator
 		ranges.add((short) 0);
 
-		// Convert to array
 		short[] result = new short[ranges.size()];
 		for(int i = 0; i < ranges.size(); i++)
 		{
@@ -208,48 +174,68 @@ public class LocalizationManager
 
 	private ImFont loadFontFromResource(ImFontAtlas fontAtlas, ImFontConfig config, short[] glyphRanges)
 	{
-		try(InputStream is = getClass().getResourceAsStream(LocalizationManager.MAIN_FONT_RESOURCE))
+		InputStream is = null;
+		ByteArrayOutputStream buffer = null;
+
+		try
 		{
+			is = getClass().getResourceAsStream(MAIN_FONT_RESOURCE);
 			if(is == null)
 			{
-				System.err.println("Font resource not found: " + LocalizationManager.MAIN_FONT_RESOURCE);
+				System.err.println("Font resource not found: " + MAIN_FONT_RESOURCE);
 				return null;
 			}
 
-			byte[] fontData = readResourceToByteArray(is);
+			buffer = new ByteArrayOutputStream();
+			byte[] data = new byte[16384];
+			int nRead;
+
+			while((nRead = is.read(data, 0, data.length)) != -1)
+			{
+				buffer.write(data, 0, nRead);
+			}
+
+			buffer.flush();
+			byte[] fontData = buffer.toByteArray();
 
 			if(fontData.length == 0)
 			{
-				System.err.println("Failed to read font data from: " + LocalizationManager.MAIN_FONT_RESOURCE);
+				System.err.println("Failed to read font data from: " + MAIN_FONT_RESOURCE);
 				return null;
 			}
 
-			return fontAtlas.addFontFromMemoryTTF(fontData, LocalizationManager.DEFAULT_FONT_SIZE, config, glyphRanges);
+			return fontAtlas.addFontFromMemoryTTF(fontData, DEFAULT_FONT_SIZE, config, glyphRanges);
 
 		}
 		catch(Exception e)
 		{
-			System.err.println("Error loading font from resource: " + LocalizationManager.MAIN_FONT_RESOURCE);
+			System.err.println("Error loading font from resource: " + MAIN_FONT_RESOURCE);
 			e.printStackTrace();
 			return null;
 		}
-	}
-
-	private byte[] readResourceToByteArray(InputStream is) throws IOException
-	{
-		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-		byte[] data = new byte[16384];
-		int nRead;
-
-		while((nRead = is.read(data, 0, data.length)) != -1)
+		finally
 		{
-			buffer.write(data, 0, nRead);
+			if(buffer != null)
+			{
+				try
+				{
+					buffer.close();
+				}
+				catch(IOException ignored)
+				{
+				}
+			}
+			if(is != null)
+			{
+				try
+				{
+					is.close();
+				}
+				catch(IOException ignored)
+				{
+				}
+			}
 		}
-
-		buffer.flush();
-		byte[] result = buffer.toByteArray();
-		buffer.close();
-		return result;
 	}
 
 	public void updateLocale()
@@ -309,37 +295,4 @@ public class LocalizationManager
 		}
 	}
 
-	public void pushLocaleFont()
-	{
-		if(mainFont != null)
-		{
-			try
-			{
-				ImGui.pushFont(mainFont);
-				fontPushCount.incrementAndGet();
-			}
-			catch(Exception e)
-			{
-				System.err.println("Failed to push font: " + e.getMessage());
-			}
-		}
-	}
-
-	public void popFont()
-	{
-		if(mainFont != null && fontPushCount.get() > 0)
-		{
-			try
-			{
-				ImGui.popFont();
-				fontPushCount.decrementAndGet();
-			}
-			catch(Exception e)
-			{
-				// Ignore if no font was pushed - this is expected
-				// Reset counter if we hit an error
-				fontPushCount.set(0);
-			}
-		}
-	}
 }

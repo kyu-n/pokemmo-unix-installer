@@ -13,6 +13,8 @@ import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -25,25 +27,33 @@ import java.util.zip.InflaterInputStream;
 
 import com.pokeemu.unix.LauncherUtils;
 
-public class Util {
+public class Util
+{
 	private static final boolean desktopBrowseSupported, desktopOpenSupported;
 
-	static {
+	static
+	{
 		desktopBrowseSupported = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE);
 		desktopOpenSupported = Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN);
 	}
 
-	public static void open(File file) {
-		if (file == null) {
+	public static void open(File file)
+	{
+		if(file == null)
+		{
 			throw new IllegalArgumentException("File may not be null");
 		}
 
 		new Thread(() -> {
-			if (desktopOpenSupported) {
-				try {
+			if(desktopOpenSupported)
+			{
+				try
+				{
 					Desktop.getDesktop().open(file);
 					return;
-				} catch (IOException ex) {
+				}
+				catch(IOException ex)
+				{
 					System.out.println("Failed to open Desktop#open " + file.getAbsolutePath());
 					ex.printStackTrace();
 				}
@@ -53,17 +63,23 @@ public class Util {
 		}).start();
 	}
 
-	public static void browse(String url) {
-		if (url == null || url.isEmpty()) {
+	public static void browse(String url)
+	{
+		if(url == null || url.isEmpty())
+		{
 			throw new IllegalArgumentException("Malformed URL " + url);
 		}
 
 		new Thread(() -> {
-			if (desktopBrowseSupported) {
-				try {
+			if(desktopBrowseSupported)
+			{
+				try
+				{
 					Desktop.getDesktop().browse(new URI(url));
 					return;
-				} catch (IOException | URISyntaxException ex) {
+				}
+				catch(IOException | URISyntaxException ex)
+				{
 					System.out.println("Failed to open Desktop#browse " + url);
 					ex.printStackTrace();
 				}
@@ -73,57 +89,75 @@ public class Util {
 		}).start();
 	}
 
-	private static void doXdgOpen(String url) {
+	private static void doXdgOpen(String url)
+	{
 		ProcessBuilder pb = new ProcessBuilder();
 		pb.inheritIO();
 		pb.command("xdg-open", url);
 
-		try {
+		try
+		{
 			pb.start();
-		} catch (IOException ex) {
+		}
+		catch(IOException ex)
+		{
 			System.out.println("Failed to start xdg-open");
 			ex.printStackTrace();
 		}
 	}
 
-	public static String calculateHash(String digestType, File file) {
-		if (digestType.equalsIgnoreCase("sha256")) {
+	public static String calculateHash(String digestType, File file)
+	{
+		if(digestType.equalsIgnoreCase("sha256"))
+		{
 			digestType = "SHA-256";
 		}
 
-		if (!file.exists() || !file.isFile()) {
+		if(!file.exists() || !file.isFile())
+		{
 			return "FILE_DOESNT_EXIST";
 		}
 
-		try (FileInputStream fis = new FileInputStream(file)) {
+		try(FileInputStream fis = new FileInputStream(file))
+		{
 			return calculateHash(digestType, fis);
-		} catch (Exception e) {
+		}
+		catch(Exception e)
+		{
 			return "ERROR CALCULATING";
 		}
 	}
 
-	public static String calculateHash(String digestType, InputStream input) {
-		try {
+	public static String calculateHash(String digestType, InputStream input)
+	{
+		try
+		{
 			MessageDigest algorithm = MessageDigest.getInstance(digestType);
 			BufferedInputStream bis = new BufferedInputStream(input);
 			DigestInputStream dis = new DigestInputStream(bis, algorithm);
 
 			byte[] buffer = new byte[4096];
-			while (dis.read(buffer) != -1) ;
+			while(dis.read(buffer) != -1) ;
 
 			byte[] hash = algorithm.digest();
 
 			return byteArray2Hex(hash);
-		} catch (NoSuchAlgorithmException e) {
+		}
+		catch(NoSuchAlgorithmException e)
+		{
 			return "Invalid Hash Algo";
-		} catch (Exception e) {
+		}
+		catch(Exception e)
+		{
 			return "ERROR CALCULATING";
 		}
 	}
 
-	public static String byteArray2Hex(byte[] hash) {
+	public static String byteArray2Hex(byte[] hash)
+	{
 		Formatter formatter = new Formatter();
-		for (byte b : hash) {
+		for(byte b : hash)
+		{
 			formatter.format("%02x", b);
 		}
 		String result = formatter.toString().toLowerCase();
@@ -131,41 +165,108 @@ public class Util {
 		return result;
 	}
 
-	public static String sanitize(final File dir, final String entry) {
-		if (entry.isEmpty()) {
+	public static String sanitize(final File dir, final String entry)
+	{
+		if(entry == null || entry.isEmpty())
+		{
 			return null;
 		}
 
-		if (new File(entry).isAbsolute()) {
+		if(new File(entry).isAbsolute())
+		{
+			System.err.println("Rejected absolute path: " + entry);
 			return null;
 		}
 
-		try {
-			final String DirPath = dir.getPath() + File.separator;
-			final String EntryPath = new File(dir, entry).getPath();
+		if(entry.contains("..") || entry.contains("~") ||
+				entry.startsWith("/") || entry.startsWith("\\"))
+		{
+			System.err.println("Rejected suspicious path pattern: " + entry);
+			return null;
+		}
 
-			if (!EntryPath.startsWith(DirPath)) {
+		try
+		{
+			Path basePath = dir.toPath().toAbsolutePath().normalize();
+			Path entryPath = basePath.resolve(entry).normalize();
+
+			Path canonicalBase = basePath.toRealPath();
+			Path canonicalEntry;
+
+			if(Files.exists(entryPath))
+			{
+				canonicalEntry = entryPath.toRealPath();
+			}
+			else
+			{
+				Path parent = entryPath.getParent();
+				if(parent != null && Files.exists(parent))
+				{
+					Path canonicalParent = parent.toRealPath();
+					if(!canonicalParent.startsWith(canonicalBase))
+					{
+						System.err.println("Path traversal detected (parent check): " + entry);
+						return null;
+					}
+				}
+				canonicalEntry = entryPath;
+			}
+
+			if(!canonicalEntry.startsWith(canonicalBase))
+			{
+				System.err.println("Path traversal detected: " + entry + " resolves outside base directory");
 				return null;
 			}
 
-			return EntryPath.substring(DirPath.length());
-		} catch (Exception e) {
-			// Ignored
+			Path currentPath = basePath;
+			for(Path component : basePath.relativize(entryPath))
+			{
+				currentPath = currentPath.resolve(component);
+				if(Files.exists(currentPath) && Files.isSymbolicLink(currentPath))
+				{
+					Path target = Files.readSymbolicLink(currentPath);
+					Path resolvedTarget = currentPath.getParent().resolve(target).normalize();
+					if(!resolvedTarget.startsWith(canonicalBase))
+					{
+						System.err.println("Symbolic link escapes base directory: " + currentPath);
+						return null;
+					}
+				}
+			}
+
+			return basePath.relativize(entryPath).toString();
+
 		}
+		catch(IOException e)
+		{
+			try
+			{
+				Path basePath = dir.toPath().toAbsolutePath().normalize();
+				Path entryPath = basePath.resolve(entry).normalize();
 
-		return null;
+				if(!entryPath.startsWith(basePath))
+				{
+					System.err.println("Path traversal detected (string check): " + entry);
+					return null;
+				}
+
+				return basePath.relativize(entryPath).toString();
+			}
+			catch(Exception ex)
+			{
+				System.err.println("Failed to sanitize path: " + entry + " - " + ex.getMessage());
+				return null;
+			}
+		}
+		catch(Exception e)
+		{
+			System.err.println("Failed to sanitize path: " + entry + " - " + e.getMessage());
+			return null;
+		}
 	}
 
-	public static HttpResponse<InputStream> getUrl(HttpClient httpClient, String rawUrl) throws URISyntaxException, IOException, InterruptedException {
-		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(rawUrl))
-				.setHeader("User-Agent", LauncherUtils.httpClientUserAgent)
-				.GET()
-				.build();
-
-		return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
-	}
-
-	public static CompletableFuture<HttpResponse<InputStream>> getUrlAsync(HttpClient httpClient, String rawUrl) throws URISyntaxException {
+	public static CompletableFuture<HttpResponse<InputStream>> getUrlAsync(HttpClient httpClient, String rawUrl) throws URISyntaxException
+	{
 		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(rawUrl))
 				.setHeader("User-Agent", LauncherUtils.httpClientUserAgent)
 				.GET()
@@ -174,7 +275,8 @@ public class Util {
 		return httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 	}
 
-	public static HttpResponse<InputStream> downloadFile(HttpClient httpClient, String rawUrl) throws URISyntaxException, IOException, InterruptedException {
+	public static HttpResponse<InputStream> downloadFile(HttpClient httpClient, String rawUrl) throws URISyntaxException, IOException, InterruptedException
+	{
 		HttpRequest httpRequest = HttpRequest.newBuilder(new URI(rawUrl))
 				.setHeader("User-Agent", LauncherUtils.httpClientUserAgent)
 				.setHeader("Accept-Encoding", "gzip, deflate")
@@ -184,8 +286,10 @@ public class Util {
 		return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
 	}
 
-	public static boolean downloadUrlToFile(HttpClient httpClient, String rawUrl, File file) {
-		try {
+	public static boolean downloadUrlToFile(HttpClient httpClient, String rawUrl, File file)
+	{
+		try
+		{
 			rawUrl = rawUrl.replace("\\", "/");
 
 			HttpResponse<InputStream> downloadResponse = downloadFile(httpClient, rawUrl);
@@ -194,24 +298,29 @@ public class Util {
 			InputStream resultingInputStream;
 			InputStream rawInputStream = downloadResponse.body();
 
-			switch (encoding.toLowerCase(Locale.ROOT)) {
+			switch(encoding.toLowerCase(Locale.ROOT))
+			{
 				case "gzip" -> resultingInputStream = new GZIPInputStream(rawInputStream);
 				case "deflate" -> resultingInputStream = new InflaterInputStream(rawInputStream, new Inflater(true));
 				default -> resultingInputStream = rawInputStream;
 			}
 
-			try (BufferedInputStream in = new BufferedInputStream(resultingInputStream);
-				 BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(file), 1024)) {
+			try(BufferedInputStream in = new BufferedInputStream(resultingInputStream);
+				BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(file), 1024))
+			{
 				byte[] data = new byte[1024];
 				int x;
 
-				while ((x = in.read(data, 0, 1024)) >= 0) {
+				while((x = in.read(data, 0, 1024)) >= 0)
+				{
 					bout.write(data, 0, x);
 				}
 			}
 
 			return true;
-		} catch (Exception e) {
+		}
+		catch(Exception e)
+		{
 			e.printStackTrace();
 			return false;
 		}

@@ -65,10 +65,9 @@ public class UnixInstaller extends Application
 	{
 		super.initImGui(config);
 
-		// Configure ImGui
 		ImGui.getIO().addConfigFlags(ImGuiConfigFlags.NavEnableKeyboard);
 		ImGui.getIO().addConfigFlags(ImGuiConfigFlags.DockingEnable);
-		ImGui.getIO().setIniFilename(null); // Disable .ini file saving
+		ImGui.getIO().setIniFilename(null);
 
 		LocalizationManager.instance.initializeFonts();
 		ImGuiStyleManager.applySystemTheme();
@@ -86,10 +85,8 @@ public class UnixInstaller extends Application
 		});
 		updaterService = new UpdaterService(this, threadBridge);
 
-		// Load configuration
 		Config.load();
 
-		// Check if we have a network error from headless mode
 		if(headlessException != null)
 		{
 			QUICK_AUTOSTART = false;
@@ -101,7 +98,6 @@ public class UnixInstaller extends Application
 		}
 		else
 		{
-			// Only initialize installer if we didn't have a headless network error
 			initializeInstaller();
 		}
 	}
@@ -109,39 +105,23 @@ public class UnixInstaller extends Application
 	@Override
 	public void process()
 	{
-		// Push the main font for all rendering
-		LocalizationManager.instance.pushLocaleFont();
+		threadBridge.processUpdates();
 
-		try
+		mainWindow.render();
+
+		if(configWindow.isVisible())
 		{
-			// Process thread bridge updates first
-			threadBridge.processUpdates();
-
-			// Render windows
-			mainWindow.render();
-
-			if(configWindow.isVisible())
-			{
-				configWindow.render();
-			}
-
-			// Render network error dialog (must be rendered every frame if visible)
-			networkErrorDialog.render();
-
-			// Render message dialogs last (on top)
-			MessageDialog.getInstance().render();
-
-			// Auto-launch logic (skip if network error dialog is visible)
-			if(QUICK_AUTOSTART && mainWindow.isCanStart() && !isLaunching.get() &&
-					!isUpdating.get() && !networkErrorDialog.isVisible())
-			{
-				launchGame();
-			}
+			configWindow.render();
 		}
-		finally
+
+		networkErrorDialog.render();
+
+		MessageDialog.getInstance().render();
+
+		if(QUICK_AUTOSTART && mainWindow.isCanStart() && !isLaunching.get() &&
+				!isUpdating.get() && !networkErrorDialog.isVisible())
 		{
-			// Always pop the font
-			LocalizationManager.instance.popFont();
+			launchGame();
 		}
 	}
 
@@ -198,6 +178,22 @@ public class UnixInstaller extends Application
 			{
 				LauncherUtils.setupDirectories();
 
+				if(Config.hasConfigurationErrors())
+				{
+					String errors = Config.getConfigurationErrors();
+					threadBridge.asyncExec(() -> {
+						mainWindow.addTaskLine("WARNING: Configuration file had errors, using defaults:");
+						for(String line : errors.split("\n"))
+						{
+							if(!line.trim().isEmpty())
+							{
+								mainWindow.addTaskLine("  - " + line);
+							}
+						}
+						mainWindow.addTaskLine("You can fix these in Settings or by editing pokemmo-installer.properties");
+					});
+				}
+
 				if(!LauncherUtils.checkJavaVersion())
 				{
 					threadBridge.showError(
@@ -215,12 +211,11 @@ public class UnixInstaller extends Application
 
 				downloadFeeds();
 
-				if(!FeedManager.SUCCESSFUL)
+				if(!FeedManager.isSuccessful())
 				{
 					return;
 				}
 
-				// Check installation
 				File pokemmoDirectory = new File(LauncherUtils.getPokemmoDir());
 				if(!pokemmoDirectory.exists())
 				{
@@ -248,11 +243,10 @@ public class UnixInstaller extends Application
 						}
 						catch(IOException | NumberFormatException e)
 						{
-							// Ignore and use default revision
 						}
 					}
 
-					boolean repair = (revision <= 0 || (FeedManager.MIN_REVISION > 0 && revision >= FeedManager.MIN_REVISION));
+					boolean repair = (revision <= 0 || (FeedManager.getMinRevision() > 0 && revision >= FeedManager.getMinRevision()));
 					updaterService.startUpdate(repair, false);
 				}
 				else
@@ -265,7 +259,6 @@ public class UnixInstaller extends Application
 			catch(Exception e)
 			{
 				e.printStackTrace();
-				// Show network error dialog for any exceptions during initialization
 				threadBridge.asyncExec(() -> networkErrorDialog.show(e));
 			}
 		});
@@ -276,37 +269,30 @@ public class UnixInstaller extends Application
 		threadBridge.setStatus(Config.getString("status.networking.load"), 0);
 		FeedManager.load(threadBridge);
 
-		if(!FeedManager.SUCCESSFUL)
+		if(!FeedManager.isSuccessful())
 		{
-			// Get the actual exception or create one with details
 			Throwable feedException = FeedManager.getLastException();
 			if(feedException == null)
 			{
-				// Create an exception with all available details
 				feedException = new Exception(Config.getString("status.networking.feed_load_failed") +
 						"\n\nDetails:\n" + FeedManager.getLastExceptionDetails());
 			}
 
 			final Throwable exceptionToShow = feedException;
 
-			// Show the network error dialog on UI thread
 			threadBridge.asyncExec(() -> networkErrorDialog.show(exceptionToShow));
 		}
 	}
 
 	public void retryConnection()
 	{
-		// Clear any previous state
 		mainWindow.clearTaskOutput();
 		mainWindow.setCanStart(false);
 
-		// Reset FeedManager state for retry
-		FeedManager.SUCCESSFUL = false;
+		FeedManager.resetForRetry();
 
-		// Add status message
 		mainWindow.addTaskLine("Retrying connection to update servers...");
 
-		// Retry initialization
 		initializeInstaller();
 	}
 
@@ -320,20 +306,20 @@ public class UnixInstaller extends Application
 		backgroundExecutor.submit(() -> {
 			try
 			{
-				LauncherUtils.launchGame();
-				// Exit the installer once the game launches
+				Process gameProcess = LauncherUtils.launchGame();
+
+				System.out.println("Game process launched successfully, PID: " + gameProcess.pid());
+
 				System.exit(EXIT_CODE_SUCCESS);
 			}
 			catch(IOException e)
 			{
 				e.printStackTrace();
+				isLaunching.set(false);
 				threadBridge.showError(
 						Config.getString("status.failed_startup"),
 						Config.getString("status.title.failed_startup"),
-						() -> {
-							isLaunching.set(false);
-							System.exit(EXIT_CODE_IO_FAILURE);
-						}
+						null
 				);
 			}
 		});
@@ -375,7 +361,6 @@ public class UnixInstaller extends Application
 		}
 	}
 
-	// Getters
 	public File getPokemmoDir()
 	{
 		return new File(LauncherUtils.getPokemmoDir());
@@ -423,7 +408,6 @@ public class UnixInstaller extends Application
 			}
 		}
 
-		// Try headless launch first unless UI is forced
 		if(!FORCE_UI)
 		{
 			HeadlessLauncher headless = new HeadlessLauncher();
@@ -457,7 +441,6 @@ public class UnixInstaller extends Application
 			System.out.println("=================================================");
 		}
 
-		// Launch the ImGui application
 		launch(new UnixInstaller());
 	}
 }

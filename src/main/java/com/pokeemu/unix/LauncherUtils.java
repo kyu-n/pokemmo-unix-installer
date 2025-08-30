@@ -16,24 +16,17 @@ import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdateFile;
 import com.pokeemu.unix.util.Util;
 
-/**
- * Shared utilities for launcher operations
- */
 public class LauncherUtils
 {
-
-	// HTTP Client shared across all launcher components
 	public static final HttpClient httpClient = HttpClient.newBuilder()
 			.followRedirects(HttpClient.Redirect.NORMAL)
 			.connectTimeout(Duration.ofSeconds(20))
 			.build();
 
-	// User agent strings
 	public static final String snapcraft = System.getenv("POKEMMO_IS_SNAPPED");
 	public static final String flatpak = System.getenv("POKEMMO_IS_FLATPAKED");
 	public static final String httpClientUserAgent;
 
-	// Paths (populated by setupDirectories)
 	private static String pokemmoDir;
 	private static String jrePath;
 
@@ -75,25 +68,11 @@ public class LauncherUtils
 		jrePath = System.getProperty("java.home") + fileSeparator + "bin" + fileSeparator + "java";
 	}
 
-	/**
-	 * Get the PokeMMO installation directory
-	 */
 	public static String getPokemmoDir()
 	{
 		return pokemmoDir;
 	}
 
-	/**
-	 * Get the Java executable path
-	 */
-	public static String getJrePath()
-	{
-		return jrePath;
-	}
-
-	/**
-	 * Get a file within the PokeMMO directory
-	 */
 	public static File getFile(String relativePath)
 	{
 		if(pokemmoDir == null)
@@ -119,7 +98,6 @@ public class LauncherUtils
 		{
 			try
 			{
-				// Handle old version format (1.x)
 				majorver = Integer.parseInt(version.split("\\.")[1]);
 			}
 			catch(Exception e2)
@@ -144,9 +122,6 @@ public class LauncherUtils
 		return lockFile.exists();
 	}
 
-	/**
-	 * Verify if PokeMMO installation is valid
-	 */
 	public static boolean isPokemmoValid()
 	{
 		if(System.getenv("POKEMMO_NOVERIFY") != null)
@@ -191,9 +166,6 @@ public class LauncherUtils
 		return true;
 	}
 
-	/**
-	 * Check if a native library is for a different platform
-	 */
 	public static boolean isNativeLibraryForOtherPlatform(String filename)
 	{
 		if(!filename.startsWith("lib/native/"))
@@ -211,24 +183,18 @@ public class LauncherUtils
 		return false;
 	}
 
-	/**
-	 * Build JVM arguments for launching the game
-	 */
 	public static List<String> buildJvmArgs()
 	{
 		List<String> args = new ArrayList<>();
 
-		// Java executable
 		args.add(jrePath);
 
-		// JVM flags
 		args.add("-XX:+IgnoreUnrecognizedVMOptions");
 		args.add("-XX:+UseZGC");
 		args.add("-XX:+ZGenerational");
 		args.add("-Xms192M");
 		args.add("-Xmx" + Config.HARD_MAX_MEMORY_MB + "M");
 
-		// AES workaround if enabled
 		if(Config.AES_INTRINSICS_WORKAROUND_ENABLED)
 		{
 			args.add("-XX:+UnlockDiagnosticVMOptions");
@@ -236,18 +202,13 @@ public class LauncherUtils
 			args.add("-XX:-UseAESIntrinsics");
 		}
 
-		// File encoding
 		args.add("-Dfile.encoding=UTF-8");
 
-		// Main class
 		args.addAll(Arrays.asList("-cp", "PokeMMO.exe", "com.pokeemu.client.Client"));
 
 		return args;
 	}
 
-	/**
-	 * Build environment variables for launching the game
-	 */
 	public static Map<String, String> buildEnvironment()
 	{
 		Map<String, String> env = new HashMap<>();
@@ -267,9 +228,6 @@ public class LauncherUtils
 		return env;
 	}
 
-	/**
-	 * Launch the game process
-	 */
 	public static Process launchGame() throws IOException
 	{
 		if(pokemmoDir == null || jrePath == null)
@@ -283,7 +241,6 @@ public class LauncherUtils
 		pb.directory(new File(pokemmoDir));
 		pb.inheritIO();
 
-		// Apply environment
 		pb.environment().putAll(buildEnvironment());
 
 		System.out.println("Launching game: " + String.join(" ", args));
@@ -291,9 +248,6 @@ public class LauncherUtils
 		return pb.start();
 	}
 
-	/**
-	 * Create the PokeMMO directory if it doesn't exist
-	 */
 	public static boolean createPokemmoDir()
 	{
 		File f = new File(pokemmoDir);

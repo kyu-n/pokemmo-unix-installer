@@ -15,9 +15,6 @@ import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
 
-/**
- * @author Kyu
- */
 public class Config
 {
 	public static final short JOPTS_XMX_VAL_MIN = 384;
@@ -35,12 +32,28 @@ public class Config
 
 	public static boolean AES_INTRINSICS_WORKAROUND_ENABLED = true;
 
+	private static boolean configHadErrors = false;
+	private static StringBuilder configErrors = new StringBuilder();
+
 	private Config()
 	{
 	}
 
+	public static boolean hasConfigurationErrors()
+	{
+		return configHadErrors;
+	}
+
+	public static String getConfigurationErrors()
+	{
+		return configErrors.toString();
+	}
+
 	public static void load()
 	{
+		configHadErrors = false;
+		configErrors = new StringBuilder();
+
 		Properties props = new Properties();
 		try
 		{
@@ -48,41 +61,124 @@ public class Config
 		}
 		catch(IOException e)
 		{
-			return; // Use default properties
+			return;
 		}
 
 		try
 		{
-			NETWORK_THREADS = Integer.parseInt(props.getProperty("network_threads", "4"));
-			if(NETWORK_THREADS < 1)
+			String networkThreadsStr = props.getProperty("network_threads", "4");
+			try
 			{
-				NETWORK_THREADS = 1;
+				NETWORK_THREADS = Integer.parseInt(networkThreadsStr);
+				if(NETWORK_THREADS < 1)
+				{
+					NETWORK_THREADS = 1;
+				}
+				else if(NETWORK_THREADS > NETWORK_THREADS_MAX)
+				{
+					NETWORK_THREADS = NETWORK_THREADS_MAX;
+				}
 			}
-			else if(NETWORK_THREADS > NETWORK_THREADS_MAX)
+			catch(NumberFormatException e)
 			{
-				NETWORK_THREADS = NETWORK_THREADS_MAX;
+				String error = "Invalid network_threads value: " + networkThreadsStr + ", using default: 4";
+				System.err.println(error);
+				configErrors.append(error).append("\n");
+				configHadErrors = true;
+				NETWORK_THREADS = 4;
 			}
 
-			HARD_MAX_MEMORY_MB = Short.parseShort(props.getProperty("max_mem_hard", "512"));
-
-			if(HARD_MAX_MEMORY_MB < JOPTS_XMX_VAL_MIN)
+			String maxMemStr = props.getProperty("max_mem_hard", "512");
+			try
 			{
-				HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MIN;
+				HARD_MAX_MEMORY_MB = Short.parseShort(maxMemStr);
+
+				if(HARD_MAX_MEMORY_MB < JOPTS_XMX_VAL_MIN)
+				{
+					HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MIN;
+				}
+				else if(HARD_MAX_MEMORY_MB > JOPTS_XMX_VAL_MAX)
+				{
+					HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MAX;
+				}
 			}
-			else if(HARD_MAX_MEMORY_MB > JOPTS_XMX_VAL_MAX)
+			catch(NumberFormatException e)
 			{
-				HARD_MAX_MEMORY_MB = JOPTS_XMX_VAL_MAX;
+				String error = "Invalid max_mem_hard value: " + maxMemStr + ", using default: 512";
+				System.err.println(error);
+				configErrors.append(error).append("\n");
+				configHadErrors = true;
+				HARD_MAX_MEMORY_MB = 512;
 			}
 
-			ACTIVE_LOCALE = PokeMMOLocale.getFromString(props.getProperty("launcher_locale"));
+			String localeStr = props.getProperty("launcher_locale");
+			if(localeStr != null)
+			{
+				PokeMMOLocale parsedLocale = PokeMMOLocale.getFromString(localeStr);
+				if(parsedLocale != null)
+				{
+					ACTIVE_LOCALE = parsedLocale;
+				}
+				else
+				{
+					String error = "Invalid launcher_locale value: " + localeStr + ", using default locale";
+					System.err.println(error);
+					configErrors.append(error).append("\n");
+					configHadErrors = true;
+					ACTIVE_LOCALE = PokeMMOLocale.getDefaultLocale();
+				}
+			}
 
-			UPDATE_CHANNEL = UpdateChannel.valueOf(props.getProperty("update_channel"));
+			String channelStr = props.getProperty("update_channel");
+			if(channelStr != null)
+			{
+				try
+				{
+					UpdateChannel parsedChannel = UpdateChannel.valueOf(channelStr);
+					if(parsedChannel.isSelectable())
+					{
+						UPDATE_CHANNEL = parsedChannel;
+					}
+					else
+					{
+						String error = "Update channel " + channelStr + " is not selectable, using default: live";
+						System.err.println(error);
+						configErrors.append(error).append("\n");
+						configHadErrors = true;
+						UPDATE_CHANNEL = UpdateChannel.live;
+					}
+				}
+				catch(IllegalArgumentException e)
+				{
+					String error = "Invalid update_channel value: " + channelStr + ", using default: live";
+					System.err.println(error);
+					configErrors.append(error).append("\n");
+					configHadErrors = true;
+					UPDATE_CHANNEL = UpdateChannel.live;
+				}
+			}
 
-			AES_INTRINSICS_WORKAROUND_ENABLED = Boolean.parseBoolean(props.getProperty("networking_corruption_workaround", "true"));
+			String aesStr = props.getProperty("networking_corruption_workaround", "true");
+			try
+			{
+				AES_INTRINSICS_WORKAROUND_ENABLED = Boolean.parseBoolean(aesStr);
+			}
+			catch(Exception e)
+			{
+				String error = "Invalid networking_corruption_workaround value: " + aesStr + ", using default: true";
+				System.err.println(error);
+				configErrors.append(error).append("\n");
+				configHadErrors = true;
+				AES_INTRINSICS_WORKAROUND_ENABLED = true;
+			}
 		}
 		catch(Exception e)
 		{
-			System.out.println("Failed to load configuration file");
+			String error = "Unexpected error loading configuration file: " + e.getMessage();
+			System.err.println(error);
+			configErrors.append(error).append("\n");
+			configHadErrors = true;
+			e.printStackTrace();
 		}
 
 		STRINGS = ACTIVE_LOCALE.getStrings();

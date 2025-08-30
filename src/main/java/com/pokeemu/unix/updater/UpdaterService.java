@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -29,13 +30,11 @@ import com.pokeemu.unix.util.Util;
 
 public class UpdaterService
 {
-
 	private final UnixInstaller parent;
 	private final IProgressReporter progressReporter;
 	private final ExecutorService downloadExecutor;
 	private final ScheduledExecutorService speedCalculator;
 
-	// Thread-safe set for disabled mirrors
 	private final Set<Integer> disabledMirrors = Collections.synchronizedSet(new HashSet<>());
 
 	private final Map<String, DownloadTask> activeTasks = new ConcurrentHashMap<>();
@@ -46,6 +45,92 @@ public class UpdaterService
 
 	private volatile boolean isShuttingDown = false;
 
+	private final Set<Path> activeTempFiles = ConcurrentHashMap.newKeySet();
+	private static final String TEMP_PREFIX = "pokemmo_download_";
+	private static final String TEMP_SUFFIX = ".tmp";
+
+	private final Thread shutdownHook;
+
+	static
+	{
+		cleanupOrphanedTempFiles();
+	}
+
+	private static void cleanupOrphanedTempFiles()
+	{
+		try
+		{
+			LauncherUtils.setupDirectories();
+			File dir = new File(LauncherUtils.getPokemmoDir());
+			if(dir.exists() && dir.isDirectory())
+			{
+				File[] tempFiles = dir.listFiles((d, name) ->
+						name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX));
+
+				if(tempFiles != null)
+				{
+					for(File tempFile : tempFiles)
+					{
+						if(tempFile.delete())
+						{
+							System.out.println("Cleaned up orphaned temp file: " + tempFile.getName());
+						}
+						else
+						{
+							System.err.println("Failed to delete orphaned temp file: " + tempFile.getName());
+						}
+					}
+				}
+
+				File[] uuidTempFiles = dir.listFiles((d, name) ->
+						name.endsWith(".tmp") && name.contains("-") && name.length() > 40);
+
+				if(uuidTempFiles != null)
+				{
+					for(File tempFile : uuidTempFiles)
+					{
+						if(tempFile.delete())
+						{
+							System.out.println("Cleaned up legacy temp file: " + tempFile.getName());
+						}
+					}
+				}
+
+				cleanTempFilesRecursively(dir);
+			}
+		}
+		catch(Exception e)
+		{
+			System.err.println("Failed to cleanup temp files: " + e.getMessage());
+		}
+	}
+
+	private static void cleanTempFilesRecursively(File dir)
+	{
+		File[] subdirs = dir.listFiles(File::isDirectory);
+		if(subdirs != null)
+		{
+			for(File subdir : subdirs)
+			{
+				File[] tempFiles = subdir.listFiles((d, name) ->
+						name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX));
+
+				if(tempFiles != null)
+				{
+					for(File tempFile : tempFiles)
+					{
+						if(tempFile.delete())
+						{
+							System.out.println("Cleaned up temp file in " + subdir.getName() + ": " + tempFile.getName());
+						}
+					}
+				}
+
+				cleanTempFilesRecursively(subdir);
+			}
+		}
+	}
+
 	public UpdaterService(UnixInstaller parent, IProgressReporter progressReporter)
 	{
 		this.parent = parent;
@@ -54,6 +139,52 @@ public class UpdaterService
 		this.speedCalculator = Executors.newSingleThreadScheduledExecutor();
 
 		speedCalculator.scheduleAtFixedRate(this::calculateDownloadSpeed, 0, 1, TimeUnit.SECONDS);
+
+		shutdownHook = new Thread(this::cleanupTempFiles, "UpdaterService-Cleanup");
+
+		try
+		{
+			Runtime.getRuntime().addShutdownHook(shutdownHook);
+		}
+		catch(Exception e)
+		{
+			System.err.println("Failed to register shutdown hook: " + e.getMessage());
+		}
+	}
+
+	private void cleanupTempFiles()
+	{
+		for(Path tempFile : activeTempFiles)
+		{
+			try
+			{
+				Files.deleteIfExists(tempFile);
+			}
+			catch(IOException e)
+			{
+				System.err.println("Failed to delete temp file: " + tempFile + " - " + e.getMessage());
+			}
+		}
+		activeTempFiles.clear();
+	}
+
+	/**
+	 * Create a predictable temp file path for downloads
+	 */
+	private Path createTempFile(Path targetPath) throws IOException
+	{
+		String targetHash = Integer.toHexString(targetPath.toString().hashCode() & 0x7FFFFFFF);
+		String tempFileName = TEMP_PREFIX +
+				targetPath.getFileName().toString().replace("/", "_").replace("\\", "_") +
+				"_" + targetHash +
+				"_" + System.currentTimeMillis() +
+				TEMP_SUFFIX;
+
+		Path tempPath = targetPath.getParent().resolve(tempFileName);
+
+		Files.createDirectories(targetPath.getParent());
+
+		return tempPath;
 	}
 
 	public void startUpdate(boolean repair, boolean clean)
@@ -98,17 +229,20 @@ public class UpdaterService
 
 		if(Files.exists(installPath))
 		{
-			Files.walk(installPath).sorted(Comparator.reverseOrder()).forEach(path -> {
-				try
-				{
-					Files.delete(path);
-					progressReporter.showInfo("status.deleted_file", path.getFileName());
-				}
-				catch(IOException e)
-				{
-					progressReporter.showInfo("status.failed_delete", path.getFileName());
-				}
-			});
+			try(var pathStream = Files.walk(installPath))
+			{
+				pathStream.sorted(Comparator.reverseOrder()).forEach(path -> {
+					try
+					{
+						Files.delete(path);
+						progressReporter.showInfo("status.deleted_file", path.getFileName());
+					}
+					catch(IOException e)
+					{
+						progressReporter.showInfo("status.failed_delete", path.getFileName());
+					}
+				});
+			}
 		}
 
 		LauncherUtils.createPokemmoDir();
@@ -263,6 +397,8 @@ public class UpdaterService
 
 	private void finishUpdate()
 	{
+		cleanupTempFiles();
+
 		progressReporter.setStatus(Config.getString("status.game_verified"), 90);
 		progressReporter.setStatus(Config.getString("status.ready"), 100);
 		parent.setUpdating(false);
@@ -354,6 +490,7 @@ public class UpdaterService
 		private boolean downloadFile()
 		{
 			String checksum_sha256 = file.sha256;
+			Path targetPath = LauncherUtils.getFile(file.name).toPath();
 
 			for(int mirror_index = 0; mirror_index < FeedManager.DOWNLOAD_MIRRORS.length; mirror_index++)
 			{
@@ -362,7 +499,6 @@ public class UpdaterService
 					return false;
 				}
 
-				// Thread-safe check for disabled mirrors
 				if(disabledMirrors.contains(mirror_index))
 				{
 					continue;
@@ -370,43 +506,67 @@ public class UpdaterService
 
 				String url = FeedManager.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster();
 
-				File tempFile = LauncherUtils.getFile(file.name + ".TEMPORARY");
-
-				if(!downloadWithProgress(url, tempFile))
+				Path tempFile = null;
+				try
 				{
-					progressReporter.showInfo("status.files.failed_download", file.name, mirror_index);
-					disabledMirrors.add(mirror_index);
-					continue;
-				}
+					tempFile = createTempFile(targetPath);
 
-				String new_sha256_hash = Util.calculateHash("SHA-256", tempFile);
-				if(!checksum_sha256.equalsIgnoreCase(new_sha256_hash))
-				{
-					progressReporter.showInfo("status.files.failed_checksum", file.name, checksum_sha256, new_sha256_hash, mirror_index);
+					activeTempFiles.add(tempFile);
 
-					if(tempFile.exists())
+					if(!downloadWithProgress(url, tempFile.toFile()))
 					{
-						tempFile.delete();
+						progressReporter.showInfo("status.files.failed_download", file.name, mirror_index);
+						disabledMirrors.add(mirror_index);
+						continue;
 					}
 
-					disabledMirrors.add(mirror_index);
-					continue;
-				}
+					String new_sha256_hash = Util.calculateHash("SHA-256", tempFile.toFile());
+					if(!checksum_sha256.equalsIgnoreCase(new_sha256_hash))
+					{
+						progressReporter.showInfo("status.files.failed_checksum", file.name, checksum_sha256, new_sha256_hash, mirror_index);
+						disabledMirrors.add(mirror_index);
+						continue;
+					}
 
-				File oldFile = LauncherUtils.getFile(file.name);
-				if(oldFile.exists() && !oldFile.delete())
+					try
+					{
+						Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+					}
+					catch(IOException atomicFail)
+					{
+						Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
+					}
+
+					activeTempFiles.remove(tempFile);
+					return true;
+
+				}
+				catch(IOException e)
 				{
-					progressReporter.showError(Config.getString("status.title.fatal_error", oldFile.getPath()), Config.getString("status.title.fatal_error"), null);
+					progressReporter.showError(
+							Config.getString("status.title.fatal_error", tempFile != null ? tempFile.toString() : "null", targetPath.toString()),
+							Config.getString("status.title.fatal_error"),
+							null
+					);
 					return false;
 				}
-
-				if(!tempFile.renameTo(oldFile))
+				finally
 				{
-					progressReporter.showError(Config.getString("status.title.fatal_error", tempFile.getPath(), oldFile.getPath()), Config.getString("status.title.fatal_error"), null);
-					return false;
+					if(tempFile != null)
+					{
+						try
+						{
+							if(Files.exists(tempFile))
+							{
+								Files.delete(tempFile);
+								activeTempFiles.remove(tempFile);
+							}
+						}
+						catch(IOException ignored)
+						{
+						}
+					}
 				}
-
-				return true;
 			}
 
 			return false;
@@ -416,7 +576,7 @@ public class UpdaterService
 		{
 			boolean success = Util.downloadUrlToFile(LauncherUtils.httpClient, url, destination);
 
-			if(success && file.size > 0)
+			if(success && file.hasSizeForProgress())
 			{
 				totalBytesDownloaded.addAndGet(file.size);
 			}
@@ -429,10 +589,21 @@ public class UpdaterService
 	{
 		isShuttingDown = true;
 
-		// Cancel all active tasks
 		activeTasks.clear();
 
-		// Shutdown executors with proper cleanup
+		cleanupTempFiles();
+
+		try
+		{
+			if(shutdownHook != null)
+			{
+				Runtime.getRuntime().removeShutdownHook(shutdownHook);
+			}
+		}
+		catch(Exception ignored)
+		{
+		}
+
 		shutdownExecutor(speedCalculator, "Speed Calculator", 2);
 		shutdownExecutor(downloadExecutor, "Download Executor", 5);
 	}

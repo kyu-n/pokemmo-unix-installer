@@ -19,8 +19,7 @@ public class HeadlessLauncher
 
 	private Throwable networkException = null;
 
-	private final ExecutorService executor = Executors.newCachedThreadPool();
-	private ScheduledExecutorService feedMonitor;
+	private volatile ScheduledExecutorService feedMonitor;
 
 	public boolean tryLaunchWithoutUI()
 	{
@@ -90,7 +89,6 @@ public class HeadlessLauncher
 		}
 		finally
 		{
-			// Always cleanup resources
 			shutdown();
 		}
 	}
@@ -98,15 +96,17 @@ public class HeadlessLauncher
 	private boolean downloadFeedsWithTimeout()
 	{
 		boolean success = false;
+		ScheduledExecutorService localFeedMonitor = null;
 
 		try
 		{
-			// Start
 			System.out.println("Downloading feeds...");
 
-			feedMonitor = Executors.newSingleThreadScheduledExecutor();
-			feedMonitor.schedule(() -> {
-				if(!FeedManager.SUCCESSFUL)
+			localFeedMonitor = Executors.newSingleThreadScheduledExecutor();
+			feedMonitor = localFeedMonitor;
+
+			localFeedMonitor.schedule(() -> {
+				if(!FeedManager.isSuccessful())
 				{
 					feedsTimedOut.set(true);
 					setNeedsUI("Network operations taking too long (>3 seconds)");
@@ -115,8 +115,7 @@ public class HeadlessLauncher
 
 			FeedManager.load(new FeedManager.HeadlessProgressReporter());
 
-			// Check result
-			if(!FeedManager.SUCCESSFUL)
+			if(!FeedManager.isSuccessful())
 			{
 				networkException = FeedManager.getLastException();
 
@@ -133,7 +132,6 @@ public class HeadlessLauncher
 			}
 			else if(feedsTimedOut.get())
 			{
-				// If we timed out but eventually succeeded, still show UI
 			}
 			else
 			{
@@ -149,20 +147,11 @@ public class HeadlessLauncher
 		}
 		finally
 		{
-			// Always cleanup the feed monitor
-			if(feedMonitor != null)
+			if(localFeedMonitor != null)
 			{
-				feedMonitor.shutdownNow();
-				try
-				{
-					feedMonitor.awaitTermination(100, TimeUnit.MILLISECONDS);
-				}
-				catch(InterruptedException e)
-				{
-					Thread.currentThread().interrupt();
-				}
-				feedMonitor = null;
+				shutdownExecutor(localFeedMonitor, "Feed Monitor", 1);
 			}
+			feedMonitor = null;
 		}
 
 		return success;
@@ -176,40 +165,55 @@ public class HeadlessLauncher
 
 	private void shutdown()
 	{
-		// Shutdown feed monitor if still active
-		if(feedMonitor != null)
+		ScheduledExecutorService monitor = feedMonitor;
+		if(monitor != null)
 		{
-			feedMonitor.shutdownNow();
-			try
-			{
-				feedMonitor.awaitTermination(500, TimeUnit.MILLISECONDS);
-			}
-			catch(InterruptedException e)
-			{
-				Thread.currentThread().interrupt();
-			}
+			shutdownExecutor(monitor, "Feed Monitor", 1);
 			feedMonitor = null;
 		}
+	}
 
-		// Shutdown main executor
-		executor.shutdown();
+	/**
+	 * Properly shutdown an executor with adequate timeout and error handling
+	 */
+	private void shutdownExecutor(ExecutorService executorToShutdown, String name, int timeoutSeconds)
+	{
+		if(executorToShutdown == null)
+		{
+			return;
+		}
+
+		executorToShutdown.shutdown();
+
 		try
 		{
-			if(!executor.awaitTermination(2, TimeUnit.SECONDS))
+			if(!executorToShutdown.awaitTermination(timeoutSeconds, TimeUnit.SECONDS))
 			{
-				executor.shutdownNow();
+				System.err.println(name + " didn't terminate gracefully within " + timeoutSeconds + " seconds, forcing shutdown");
 
-				// Final attempt
-				if(!executor.awaitTermination(1, TimeUnit.SECONDS))
+				executorToShutdown.shutdownNow();
+
+				if(!executorToShutdown.awaitTermination(timeoutSeconds, TimeUnit.SECONDS))
 				{
-					System.err.println("Executor failed to terminate cleanly");
+					System.err.println(name + " failed to terminate even after forced shutdown");
+					Thread.getAllStackTraces().forEach((thread, stack) -> {
+						if(thread.getName().contains(name))
+						{
+							System.err.println("Stuck thread: " + thread.getName());
+							for(StackTraceElement element : stack)
+							{
+								System.err.println("  at " + element);
+							}
+						}
+					});
 				}
 			}
 		}
 		catch(InterruptedException e)
 		{
-			executor.shutdownNow();
+			System.err.println(name + " shutdown interrupted");
 			Thread.currentThread().interrupt();
+			executorToShutdown.shutdownNow();
 		}
 	}
 

@@ -16,13 +16,6 @@ ext {
 dependencies {
     implementation "io.github.spair:imgui-java-app:${imguiVersion}"
     implementation 'com.ibm.icu:icu4j:77.1'
-
-    // Removed dead dependencies:
-    // - gson (no JSON parsing in codebase)
-    // - commons-lang3 (no StringUtils usage)
-    // - commons-io (using standard Java NIO)
-    // - httpclient5 (using built-in java.net.http.HttpClient)
-    // - slf4j + logback (using System.out/err for logging)
 }
 
 java {

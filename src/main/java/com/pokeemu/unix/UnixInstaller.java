@@ -11,12 +11,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.ui.ConfigWindow;
+import com.pokeemu.unix.ui.ErrorDialog;
 import com.pokeemu.unix.ui.ImGuiStyleManager;
 import com.pokeemu.unix.ui.ImGuiThreadBridge;
 import com.pokeemu.unix.ui.LocalizationManager;
 import com.pokeemu.unix.ui.MainWindow;
 import com.pokeemu.unix.ui.MessageDialog;
-import com.pokeemu.unix.ui.NetworkErrorDialog;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdaterService;
 
@@ -42,10 +42,11 @@ public class UnixInstaller extends Application
 	private MainWindow mainWindow;
 	private ConfigWindow configWindow;
 	private ImGuiThreadBridge threadBridge;
-	private NetworkErrorDialog networkErrorDialog;
+	private ErrorDialog errorDialog;
 
 	private final AtomicBoolean isLaunching = new AtomicBoolean(false);
 	private final AtomicBoolean isUpdating = new AtomicBoolean(false);
+
 	private final AtomicBoolean disposed = new AtomicBoolean(false);
 
 	private ExecutorService backgroundExecutor;
@@ -75,7 +76,7 @@ public class UnixInstaller extends Application
 		threadBridge = new ImGuiThreadBridge();
 		mainWindow = new MainWindow(this, threadBridge, WINDOW_WIDTH, WINDOW_HEIGHT);
 		configWindow = new ConfigWindow(this);
-		networkErrorDialog = new NetworkErrorDialog(this);
+		errorDialog = new ErrorDialog(this);
 
 		backgroundExecutor = Executors.newCachedThreadPool(r -> {
 			Thread t = new Thread(r);
@@ -85,6 +86,7 @@ public class UnixInstaller extends Application
 		});
 
 		updaterService = new UpdaterService(this, threadBridge);
+
 		MessageDialog.getInstance().setParent(this);
 
 		if(headlessException != null)
@@ -92,7 +94,7 @@ public class UnixInstaller extends Application
 			QUICK_AUTOSTART = false;
 
 			threadBridge.asyncExec(() -> {
-				networkErrorDialog.show(headlessException);
+				errorDialog.show(headlessException);
 				mainWindow.addTaskLine("ERROR: " + headlessException.getMessage());
 			});
 		}
@@ -114,12 +116,12 @@ public class UnixInstaller extends Application
 			configWindow.render();
 		}
 
-		networkErrorDialog.render();
+		errorDialog.render();
 
 		MessageDialog.getInstance().render();
 
 		if(QUICK_AUTOSTART && mainWindow.isCanStart() && !isLaunching.get() &&
-				!isUpdating.get() && !networkErrorDialog.isVisible())
+				!isUpdating.get() && !errorDialog.isVisible())
 		{
 			launchGame();
 		}
@@ -249,7 +251,7 @@ public class UnixInstaller extends Application
 				{
 					threadBridge.showError(
 							Config.getString("error.dir_not_dir", LauncherUtils.getPokemmoDir(), "DIR_5"),
-							"Directory Error",
+							Config.getString("status.title.io_failure"),
 							() -> System.exit(EXIT_CODE_IO_FAILURE)
 					);
 				}
@@ -281,7 +283,7 @@ public class UnixInstaller extends Application
 			catch(Exception e)
 			{
 				e.printStackTrace();
-				threadBridge.asyncExec(() -> networkErrorDialog.show(e));
+				threadBridge.asyncExec(() -> errorDialog.show(e));
 			}
 		});
 	}
@@ -302,7 +304,7 @@ public class UnixInstaller extends Application
 
 			final Throwable exceptionToShow = feedException;
 
-			threadBridge.asyncExec(() -> networkErrorDialog.show(exceptionToShow));
+			threadBridge.asyncExec(() -> errorDialog.show(exceptionToShow, ErrorDialog.ErrorType.NETWORK));
 		}
 	}
 
@@ -408,9 +410,9 @@ public class UnixInstaller extends Application
 		return mainWindow;
 	}
 
-	public NetworkErrorDialog getNetworkErrorDialog()
+	public ErrorDialog getErrorDialog()
 	{
-		return networkErrorDialog;
+		return errorDialog;
 	}
 
 	public UpdaterService getUpdaterService()

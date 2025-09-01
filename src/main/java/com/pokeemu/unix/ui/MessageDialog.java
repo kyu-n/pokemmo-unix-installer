@@ -47,7 +47,6 @@ public class MessageDialog extends AbstractModalWindow
 		{
 			INSTANCE = new MessageDialog();
 		}
-
 		return INSTANCE;
 	}
 
@@ -62,7 +61,7 @@ public class MessageDialog extends AbstractModalWindow
 		if(parent != null)
 		{
 			boolean otherModalOpen = (parent.getConfigWindow() != null && parent.getConfigWindow().isVisible()) ||
-					(parent.getNetworkErrorDialog() != null && parent.getNetworkErrorDialog().isVisible());
+					(parent.getErrorDialog() != null && parent.getErrorDialog().isVisible());
 
 			if(otherModalOpen)
 			{
@@ -107,7 +106,19 @@ public class MessageDialog extends AbstractModalWindow
 	@Override
 	protected String getTitle()
 	{
-		return currentTitle != null ? currentTitle : "Message";
+		if(currentTitle != null)
+		{
+			return currentTitle;
+		}
+
+		switch(currentType)
+		{
+			case ERROR -> { return Config.getString("dialog.title.error"); }
+			case WARNING -> { return Config.getString("dialog.title.warning"); }
+			case YES_NO -> { return Config.getString("dialog.title.confirm"); }
+			case INFO -> { return Config.getString("dialog.title.information"); }
+			default -> { return Config.getString("dialog.title.message"); }
+		}
 	}
 
 	@Override
@@ -200,7 +211,6 @@ public class MessageDialog extends AbstractModalWindow
 		{
 			onYes.run();
 		}
-
 		close();
 	}
 
@@ -210,7 +220,6 @@ public class MessageDialog extends AbstractModalWindow
 		{
 			onYes.run();
 		}
-
 		close();
 	}
 
@@ -220,7 +229,6 @@ public class MessageDialog extends AbstractModalWindow
 		{
 			onNo.run();
 		}
-
 		close();
 	}
 

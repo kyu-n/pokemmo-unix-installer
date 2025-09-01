@@ -1,6 +1,7 @@
 package com.pokeemu.unix.updater;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringReader;
@@ -9,6 +10,7 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.net.http.HttpResponse;
+import java.nio.file.ReadOnlyFileSystemException;
 import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.Date;
@@ -48,6 +50,11 @@ public class FeedManager
 	};
 
 	private static final ReadWriteLock stateLock = new ReentrantReadWriteLock();
+	private static final int MAX_RETRY_ATTEMPTS = 2;
+	private static final long INITIAL_RETRY_DELAY_MS = 500;
+	private static final long MAX_RETRY_DELAY_MS = 2000;
+	private static final int HTTP_TIMEOUT_SECONDS = 10;
+	private static final int TOTAL_TIMEOUT_SECONDS = 15;
 
 	private enum LoadState
 	{
@@ -63,10 +70,6 @@ public class FeedManager
 	private static Throwable lastException = null;
 	private static String lastFailedMirror = null;
 	private static final List<MirrorFailure> allFailures = new ArrayList<>();
-
-	private static final int MAX_RETRY_ATTEMPTS = 2;
-	private static final long INITIAL_RETRY_DELAY_MS = 500;
-	private static final long MAX_RETRY_DELAY_MS = 2000;
 
 	private static class MirrorFailure
 	{
@@ -93,11 +96,7 @@ public class FeedManager
 
 		private static FailureType categorizeException(Throwable e)
 		{
-			Throwable cause = e;
-			if(e instanceof CompletionException && e.getCause() != null)
-			{
-				cause = e.getCause();
-			}
+			Throwable cause = unwrapException(e);
 
 			if(cause instanceof ConnectException ||
 					cause instanceof SocketTimeoutException ||
@@ -125,35 +124,32 @@ public class FeedManager
 		}
 	}
 
+	private static class FeedData
+	{
+		final byte[] content;
+		final byte[] signature;
+
+		FeedData(byte[] content, byte[] signature)
+		{
+			this.content = content;
+			this.signature = signature;
+		}
+	}
+
 	public static void resetForRetry()
 	{
-		stateLock.writeLock().lock();
-		try
-		{
+		executeWithWriteLock(() -> {
 			if(loadState == LoadState.LOADING)
 			{
 				throw new IllegalStateException("Cannot reset while feed loading is in progress");
 			}
-
-			loadState = LoadState.IDLE;
-			files.clear();
-			MIN_REVISION = 0;
-			lastException = null;
-			lastFailedMirror = null;
-			allFailures.clear();
-		}
-		finally
-		{
-			stateLock.writeLock().unlock();
-		}
+			clearState();
+		});
 	}
 
 	public static void load(IProgressReporter progressReporter)
 	{
-		stateLock.writeLock().lock();
-
-		try
-		{
+		executeWithWriteLock(() -> {
 			if(loadState == LoadState.LOADING)
 			{
 				System.out.println("FeedManager.load() called while another load is in progress, skipping");
@@ -167,16 +163,8 @@ public class FeedManager
 			}
 
 			loadState = LoadState.LOADING;
-			files.clear();
-			MIN_REVISION = 0;
-			lastException = null;
-			lastFailedMirror = null;
-			allFailures.clear();
-		}
-		finally
-		{
-			stateLock.writeLock().unlock();
-		}
+			clearState();
+		});
 
 		boolean success = false;
 		try
@@ -191,20 +179,16 @@ public class FeedManager
 					break;
 				}
 
-				boolean mirrorSuccess = tryMirrorWithRetry(mirror, sig_format, pub_key, progressReporter);
-
-				if(mirrorSuccess)
+				if(tryMirrorWithRetry(mirror, sig_format, pub_key, progressReporter))
 				{
 					success = true;
 					break;
 				}
 			}
 
-			stateLock.writeLock().lock();
-
-			try
-			{
-				if(success)
+			boolean finalSuccess = success;
+			executeWithWriteLock(() -> {
+				if(finalSuccess)
 				{
 					loadState = LoadState.SUCCESS;
 					lastException = null;
@@ -214,74 +198,65 @@ public class FeedManager
 					loadState = LoadState.FAILED;
 					handleAllMirrorsFailed(progressReporter);
 				}
-			}
-			finally
-			{
-				stateLock.writeLock().unlock();
-			}
+			});
 		}
 		catch(Exception e)
 		{
-			stateLock.writeLock().lock();
-			try
-			{
+			executeWithWriteLock(() -> {
 				loadState = LoadState.FAILED;
 				lastException = e;
-			}
-			finally
-			{
-				stateLock.writeLock().unlock();
-			}
+			});
 		}
+	}
+
+	private static void clearState()
+	{
+		loadState = LoadState.IDLE;
+		files.clear();
+		MIN_REVISION = 0;
+		lastException = null;
+		lastFailedMirror = null;
+		allFailures.clear();
 	}
 
 	private static boolean hasNonRetryableError()
 	{
-		stateLock.readLock().lock();
-
-		try
-		{
+		return executeWithReadLock(() -> {
 			for(MirrorFailure failure : allFailures)
 			{
-				if(failure.type == MirrorFailure.FailureType.OTHER)
+				if(failure.type == MirrorFailure.FailureType.OTHER &&
+						isSystemError(failure.exception))
 				{
-					String message = failure.exception.getMessage();
-					if(message != null)
-					{
-						String lowerMessage = message.toLowerCase();
-						if(lowerMessage.contains("disk") ||
-								lowerMessage.contains("space") ||
-								lowerMessage.contains("permission") ||
-								lowerMessage.contains("access denied"))
-						{
-							return true;
-						}
-					}
+					return true;
 				}
 			}
-		}
-		finally
-		{
-			stateLock.readLock().unlock();
-		}
+			return false;
+		});
+	}
 
+	private static boolean isSystemError(Throwable exception)
+	{
+		Throwable cause = exception;
+		while(cause != null)
+		{
+			if(cause instanceof java.nio.file.ReadOnlyFileSystemException ||
+					cause instanceof java.io.IOException)
+			{
+				return true;
+			}
+			cause = cause.getCause();
+		}
 		return false;
 	}
 
 	private static void recordFailure(String mirror, Throwable exception)
 	{
 		MirrorFailure failure = new MirrorFailure(mirror, exception);
-		stateLock.writeLock().lock();
-		try
-		{
+		executeWithWriteLock(() -> {
 			allFailures.add(failure);
 			lastException = exception;
 			lastFailedMirror = mirror;
-		}
-		finally
-		{
-			stateLock.writeLock().unlock();
-		}
+		});
 	}
 
 	private static boolean tryMirrorWithRetry(String mirror, String sig_format, PublicKey pub_key,
@@ -296,47 +271,23 @@ public class FeedManager
 			{
 				if(attempt > 0)
 				{
-					try
-					{
-						retryDelay *= 2;
-						Thread.sleep(Math.min(retryDelay, MAX_RETRY_DELAY_MS));
-					}
-					catch(InterruptedException e)
-					{
-						Thread.currentThread().interrupt();
-						return false;
-					}
-
+					retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY_MS);
+					sleepInterruptibly(retryDelay);
 					progressReporter.showInfo("status.networking.retry_attempt", mirror, attempt);
 				}
 
-				boolean success = tryMirror(mirror, sig_format, pub_key, progressReporter);
-				if(success)
+				if(tryMirror(mirror, sig_format, pub_key, progressReporter))
 				{
 					return true;
 				}
 
-				MirrorFailure lastFailure = null;
-				stateLock.readLock().lock();
-				try
-				{
-					if(!allFailures.isEmpty())
-					{
-						lastFailure = allFailures.getLast();
-					}
-				}
-				finally
-				{
-					stateLock.readLock().unlock();
-				}
-
+				MirrorFailure lastFailure = getLastFailure();
 				if(lastFailure != null && !lastFailure.isRetryable())
 				{
 					break;
 				}
 
 				attempt++;
-
 			}
 			catch(Exception e)
 			{
@@ -349,222 +300,181 @@ public class FeedManager
 		return false;
 	}
 
+	private static MirrorFailure getLastFailure()
+	{
+		return executeWithReadLock(() ->
+				allFailures.isEmpty() ? null : allFailures.getLast()
+		);
+	}
+
+	private static void sleepInterruptibly(long millis) throws InterruptedException
+	{
+		Thread.sleep(millis);
+	}
+
 	private static boolean tryMirror(String mirror, String sig_format, PublicKey pub_key,
 									 IProgressReporter progressReporter)
 	{
 		try
 		{
-			CompletableFuture<HttpResponse<InputStream>> mainFeedResponse =
-					Util.getUrlAsync(LauncherUtils.httpClient, mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/main_feed.txt")
-							.orTimeout(10, TimeUnit.SECONDS);
-			CompletableFuture<HttpResponse<InputStream>> signatureResponse =
-					Util.getUrlAsync(LauncherUtils.httpClient, mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/main_feed.sig256")
-							.orTimeout(10, TimeUnit.SECONDS);
-			CompletableFuture<HttpResponse<InputStream>> updateFeedResponse =
-					Util.getUrlAsync(LauncherUtils.httpClient, mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/update_feed.txt")
-							.orTimeout(10, TimeUnit.SECONDS);
-			CompletableFuture<HttpResponse<InputStream>> updateSignatureResponse =
-					Util.getUrlAsync(LauncherUtils.httpClient, mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/update_feed.sig256")
-							.orTimeout(10, TimeUnit.SECONDS);
+			String baseUrl = mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/";
 
-			CompletableFuture<Void> allFutures = CompletableFuture.allOf(
-					mainFeedResponse, signatureResponse, updateFeedResponse, updateSignatureResponse);
+			FeedData mainFeed = downloadAndVerifyFeed(baseUrl, "main_feed", sig_format, pub_key, progressReporter, mirror);
+			if(mainFeed == null) return false;
 
-			try
-			{
-				allFutures.get(15, TimeUnit.SECONDS);
-			}
-			catch(TimeoutException te)
-			{
-				mainFeedResponse.cancel(true);
-				signatureResponse.cancel(true);
-				updateFeedResponse.cancel(true);
-				updateSignatureResponse.cancel(true);
+			FeedData updateFeed = downloadAndVerifyFeed(baseUrl, "update_feed", sig_format, pub_key, progressReporter, mirror);
+			if(updateFeed == null) return false;
 
-				progressReporter.showInfo("status.networking.feed_load_failed_validation", mirror, "TIMEOUT");
-				recordFailure(mirror, te);
-				return false;
-			}
-			catch(CompletionException ce)
-			{
-				Throwable cause = ce.getCause() != null ? ce.getCause() : ce;
-				progressReporter.showInfo("status.networking.feed_load_failed_validation", mirror, "NETWORK_ERROR");
-				recordFailure(mirror, cause);
-				return false;
-			}
-			catch(ExecutionException ee)
-			{
-				Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
-				progressReporter.showInfo("status.networking.feed_load_failed_validation", mirror, cause.getClass().getSimpleName());
-				recordFailure(mirror, cause);
-				return false;
-			}
-			catch(Exception e)
-			{
-				progressReporter.showInfo("status.networking.feed_load_failed_validation", mirror, e.getClass().getSimpleName());
-				recordFailure(mirror, e);
-				return false;
-			}
-
-			byte[] mainFeedRaw, mainFeedSigRaw, updateFeedRaw, updateFeedSigRaw;
-
-			try(InputStream mainFeedIs = mainFeedResponse.get().body();
-				InputStream mainFeedSigIs = signatureResponse.get().body())
-			{
-
-				mainFeedRaw = mainFeedIs.readAllBytes();
-				mainFeedSigRaw = mainFeedSigIs.readAllBytes();
-
-				if(!CryptoUtil.verifySignature(mainFeedRaw, mainFeedSigRaw, pub_key, sig_format))
-				{
-					System.out.println("Main feed failed verification");
-					progressReporter.showInfo("status.networking.feed_load_failed_alt", mirror);
-
-					SecurityException ex = new SecurityException("Main feed signature verification failed for mirror: " + mirror);
-					MirrorFailure failure = new MirrorFailure(mirror, ex);
-
-					stateLock.writeLock().lock();
-
-					try
-					{
-						allFailures.add(failure);
-						lastException = ex;
-						lastFailedMirror = mirror;
-					}
-					finally
-					{
-						stateLock.writeLock().unlock();
-					}
-					return false;
-				}
-			}
-
-			try(InputStream updateFeedIs = updateFeedResponse.get().body();
-				InputStream updateFeedSigIs = updateSignatureResponse.get().body())
-			{
-
-				updateFeedRaw = updateFeedIs.readAllBytes();
-				updateFeedSigRaw = updateFeedSigIs.readAllBytes();
-
-				if(!CryptoUtil.verifySignature(updateFeedRaw, updateFeedSigRaw, pub_key, sig_format))
-				{
-					System.out.println("Update feed failed verification");
-					progressReporter.showInfo("status.networking.feed_load_failed_alt", mirror);
-
-					SecurityException ex = new SecurityException("Update feed signature verification failed for mirror: " + mirror);
-					MirrorFailure failure = new MirrorFailure(mirror, ex);
-
-					stateLock.writeLock().lock();
-
-					try
-					{
-						allFailures.add(failure);
-						lastException = ex;
-						lastFailedMirror = mirror;
-					}
-					finally
-					{
-						stateLock.writeLock().unlock();
-					}
-					return false;
-				}
-			}
-
-			DocumentBuilderFactory dbf = getSecureDocumentBuilderFactory();
-			DocumentBuilder db = dbf.newDocumentBuilder();
-			InputSource is = new InputSource(new StringReader(new String(mainFeedRaw)));
-			Document doc = db.parse(is);
-
-			Element main_feed = (Element) doc.getElementsByTagName("main_feed").item(0);
-
-			int tempRevision = 0;
-			if(main_feed.getElementsByTagName("min_revision").getLength() > 0)
-			{
-				tempRevision = Integer.parseInt(main_feed.getElementsByTagName("min_revision").item(0).getTextContent());
-			}
-
-			File current_directory = new File(".");
-			dbf = getSecureDocumentBuilderFactory();
-			db = dbf.newDocumentBuilder();
-			is = new InputSource(new StringReader(new String(updateFeedRaw)));
-			doc = db.parse(is);
-
-			Element update_feed = (Element) doc.getElementsByTagName("update_feed").item(0);
-			boolean has_valid_file_entry = false;
-
-			List<UpdateFile> tempFiles = new ArrayList<>();
-
-			NodeList filesNodeList = update_feed.getElementsByTagName("file");
-			for(int x = 0; x < filesNodeList.getLength(); x++)
-			{
-				Node fileT = filesNodeList.item(x);
-				if(fileT.getNodeType() == Node.ELEMENT_NODE)
-				{
-					Element file = (Element) fileT;
-					String sanitized = Util.sanitize(current_directory, file.getAttribute("name"));
-
-					if(sanitized != null && file.hasAttribute("sha256"))
-					{
-						boolean only_if_not_exists = false;
-						if(file.hasAttribute("only_if_not_exists"))
-						{
-							try
-							{
-								only_if_not_exists = Boolean.parseBoolean(file.getAttribute("only_if_not_exists"));
-							}
-							catch(Exception ignored)
-							{
-							}
-						}
-
-						UpdateFile f = new UpdateFile(sanitized, file.getAttribute("sha256"),
-								file.getAttribute("size"), only_if_not_exists);
-						tempFiles.add(f);
-						has_valid_file_entry = true;
-					}
-					else
-					{
-						return false;
-					}
-				}
-			}
-
-			if(has_valid_file_entry)
-			{
-				stateLock.writeLock().lock();
-				try
-				{
-					MIN_REVISION = tempRevision;
-					files.clear();
-					files.addAll(tempFiles);
-				}
-				finally
-				{
-					stateLock.writeLock().unlock();
-				}
-			}
-
-			return has_valid_file_entry;
-
+			return processFeedData(mainFeed.content, updateFeed.content);
 		}
 		catch(Exception e)
 		{
 			e.printStackTrace();
 			progressReporter.showInfo("status.networking.feed_load_failed_alt", mirror);
+			recordFailure(mirror, e);
+			return false;
+		}
+	}
 
-			MirrorFailure failure = new MirrorFailure(mirror, e);
+	private static FeedData downloadAndVerifyFeed(String baseUrl, String feedName, String sig_format,
+												  PublicKey pub_key, IProgressReporter progressReporter,
+												  String mirror) throws Exception
+	{
+		CompletableFuture<HttpResponse<InputStream>> feedResponse =
+				Util.getUrlAsync(LauncherUtils.httpClient, baseUrl + feedName + ".txt")
+						.orTimeout(HTTP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		CompletableFuture<HttpResponse<InputStream>> signatureResponse =
+				Util.getUrlAsync(LauncherUtils.httpClient, baseUrl + feedName + ".sig256")
+						.orTimeout(HTTP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-			stateLock.writeLock().lock();
-			try
+		CompletableFuture<Void> allFutures = CompletableFuture.allOf(feedResponse, signatureResponse);
+
+		try
+		{
+			allFutures.get(TOTAL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		}
+		catch(TimeoutException | CompletionException | ExecutionException e)
+		{
+			feedResponse.cancel(true);
+			signatureResponse.cancel(true);
+
+			String errorType = getErrorType(e);
+			progressReporter.showInfo("status.networking.feed_load_failed_alt", mirror, errorType);
+			recordFailure(mirror, unwrapException(e));
+			return null;
+		}
+
+		byte[] feedRaw, sigRaw;
+		try(InputStream feedIs = feedResponse.get().body();
+			InputStream sigIs = signatureResponse.get().body())
+		{
+			feedRaw = feedIs.readAllBytes();
+			sigRaw = sigIs.readAllBytes();
+		}
+
+		if(!CryptoUtil.verifySignature(feedRaw, sigRaw, pub_key, sig_format))
+		{
+			System.out.println(feedName + " failed verification");
+			progressReporter.showInfo("status.networking.feed_load_failed_validation", mirror);
+
+			SecurityException ex = new SecurityException(feedName + " signature verification failed for mirror: " + mirror);
+			recordFailure(mirror, ex);
+			return null;
+		}
+
+		return new FeedData(feedRaw, sigRaw);
+	}
+
+	private static String getErrorType(Exception e)
+	{
+		if(e instanceof TimeoutException) return "TIMEOUT";
+		if(e instanceof CompletionException) return "NETWORK_ERROR";
+		Throwable cause = unwrapException(e);
+		return cause.getClass().getSimpleName();
+	}
+
+	private static Throwable unwrapException(Throwable e)
+	{
+		if(e instanceof CompletionException || e instanceof ExecutionException)
+		{
+			return e.getCause() != null ? e.getCause() : e;
+		}
+		return e;
+	}
+
+	private static boolean processFeedData(byte[] mainFeedRaw, byte[] updateFeedRaw) throws Exception
+	{
+		Document mainDoc = parseXmlDocument(new String(mainFeedRaw));
+		Element main_feed = (Element) mainDoc.getElementsByTagName("main_feed").item(0);
+
+		int tempRevision = 0;
+		if(main_feed.getElementsByTagName("min_revision").getLength() > 0)
+		{
+			tempRevision = Integer.parseInt(main_feed.getElementsByTagName("min_revision").item(0).getTextContent());
+		}
+
+		Document updateDoc = parseXmlDocument(new String(updateFeedRaw));
+		Element update_feed = (Element) updateDoc.getElementsByTagName("update_feed").item(0);
+
+		List<UpdateFile> tempFiles = parseUpdateFiles(update_feed);
+
+		if(!tempFiles.isEmpty())
+		{
+			int finalRevision = tempRevision;
+			executeWithWriteLock(() -> {
+				MIN_REVISION = finalRevision;
+				files.clear();
+				files.addAll(tempFiles);
+			});
+			return true;
+		}
+
+		return false;
+	}
+
+	private static Document parseXmlDocument(String xmlContent) throws Exception
+	{
+		DocumentBuilder db = getSecureDocumentBuilderFactory().newDocumentBuilder();
+		InputSource is = new InputSource(new StringReader(xmlContent));
+		return db.parse(is);
+	}
+
+	private static List<UpdateFile> parseUpdateFiles(Element update_feed)
+	{
+		List<UpdateFile> tempFiles = new ArrayList<>();
+		File current_directory = new File(".");
+
+		NodeList filesNodeList = update_feed.getElementsByTagName("file");
+		for(int x = 0; x < filesNodeList.getLength(); x++)
+		{
+			Node fileT = filesNodeList.item(x);
+			if(fileT.getNodeType() == Node.ELEMENT_NODE)
 			{
-				allFailures.add(failure);
-				lastException = e;
-				lastFailedMirror = mirror;
+				Element file = (Element) fileT;
+				String sanitized = Util.sanitize(current_directory, file.getAttribute("name"));
+
+				if(sanitized != null && file.hasAttribute("sha256"))
+				{
+					boolean only_if_not_exists = parseBoolean(file.getAttribute("only_if_not_exists"));
+
+					UpdateFile f = new UpdateFile(sanitized, file.getAttribute("sha256"),
+							file.getAttribute("size"), only_if_not_exists);
+					tempFiles.add(f);
+				}
 			}
-			finally
-			{
-				stateLock.writeLock().unlock();
-			}
+		}
+
+		return tempFiles;
+	}
+
+	private static boolean parseBoolean(String value)
+	{
+		try
+		{
+			return Boolean.parseBoolean(value);
+		}
+		catch(Exception ignored)
+		{
 			return false;
 		}
 	}
@@ -594,63 +504,81 @@ public class FeedManager
 		}
 	}
 
-	public static List<UpdateFile> getFiles()
+	private static <T> T executeWithReadLock(java.util.function.Supplier<T> action)
 	{
 		stateLock.readLock().lock();
 		try
 		{
-			return new ArrayList<>(files);
+			return action.get();
 		}
 		finally
 		{
 			stateLock.readLock().unlock();
 		}
+	}
+
+	private static void executeWithReadLock(Runnable action)
+	{
+		stateLock.readLock().lock();
+		try
+		{
+			action.run();
+		}
+		finally
+		{
+			stateLock.readLock().unlock();
+		}
+	}
+
+	private static <T> T executeWithWriteLock(java.util.function.Supplier<T> action)
+	{
+		stateLock.writeLock().lock();
+		try
+		{
+			return action.get();
+		}
+		finally
+		{
+			stateLock.writeLock().unlock();
+		}
+	}
+
+	private static void executeWithWriteLock(Runnable action)
+	{
+		stateLock.writeLock().lock();
+		try
+		{
+			action.run();
+		}
+		finally
+		{
+			stateLock.writeLock().unlock();
+		}
+	}
+
+	public static List<UpdateFile> getFiles()
+	{
+		return executeWithReadLock(() -> new ArrayList<>(files));
 	}
 
 	public static Throwable getLastException()
 	{
-		stateLock.readLock().lock();
-		try
-		{
-			return lastException;
-		}
-		finally
-		{
-			stateLock.readLock().unlock();
-		}
+		return executeWithReadLock(() -> lastException);
 	}
 
 	public static boolean isSuccessful()
 	{
-		stateLock.readLock().lock();
-		try
-		{
-			return loadState == LoadState.SUCCESS;
-		}
-		finally
-		{
-			stateLock.readLock().unlock();
-		}
+		return executeWithReadLock(() -> loadState == LoadState.SUCCESS);
 	}
 
 	public static int getMinRevision()
 	{
-		stateLock.readLock().lock();
-		try
-		{
-			return MIN_REVISION;
-		}
-		finally
-		{
-			stateLock.readLock().unlock();
-		}
+		return executeWithReadLock(() -> MIN_REVISION);
 	}
 
 	public static String getLastExceptionDetails()
 	{
-		stateLock.readLock().lock();
-		try
-		{
+		return executeWithReadLock(() -> {
 			if(lastException == null && allFailures.isEmpty())
 			{
 				return "No exception details available";
@@ -696,11 +624,7 @@ public class FeedManager
 			}
 
 			return sw.toString();
-		}
-		finally
-		{
-			stateLock.readLock().unlock();
-		}
+		});
 	}
 
 	public static class HeadlessProgressReporter implements IProgressReporter

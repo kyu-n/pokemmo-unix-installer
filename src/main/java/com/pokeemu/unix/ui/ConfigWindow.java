@@ -66,6 +66,13 @@ public class ConfigWindow extends AbstractModalWindow
 	@Override
 	protected void onShow()
 	{
+		// Don't open if ErrorDialog is visible (ImGui only supports one modal)
+		if(parent.getErrorDialog() != null && parent.getErrorDialog().isVisible())
+		{
+			dialogState = DialogState.CLOSED;
+			return;
+		}
+
 		loadCurrentSettings();
 	}
 

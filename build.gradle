@@ -9,12 +9,8 @@ repositories {
     google()
 }
 
-ext {
-    imguiVersion = '1.89.0'
-}
-
 dependencies {
-    implementation "io.github.spair:imgui-java-app:${imguiVersion}"
+    implementation "io.github.spair:imgui-java-app:1.90.0"
     implementation 'com.ibm.icu:icu4j:77.1'
 }
 

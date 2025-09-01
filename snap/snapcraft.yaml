@@ -1,6 +1,6 @@
 name: pokemmo
 title: PokeMMO
-base: core22
+base: core24
 version: '3.0a'
 summary: PokeMMO Game Client
 license: 'Proprietary'
@@ -36,8 +36,8 @@ package-repositories:
 
 apps:
   pokemmo:
-    command: desktop-launch $SNAP/runtime/bin/java -jar $SNAP/jar/unix-installer.jar
-    extensions: [ gnome-3-38 ]
+    command: runtime/bin/java -jar $SNAP/jar/unix-installer.jar
+    extensions: [ gnome ]
     plugs:
       - network
       - opengl

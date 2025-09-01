@@ -56,6 +56,9 @@ public class FeedManager
 	private static final int HTTP_TIMEOUT_SECONDS = 10;
 	private static final int TOTAL_TIMEOUT_SECONDS = 15;
 
+	private static volatile boolean shutdownRequested = false;
+	private static CompletableFuture<Boolean> currentLoadOperation = null;
+
 	private enum LoadState
 	{
 		IDLE,
@@ -136,6 +139,15 @@ public class FeedManager
 		}
 	}
 
+	public static void requestShutdown()
+	{
+		shutdownRequested = true;
+		if(currentLoadOperation != null && !currentLoadOperation.isDone())
+		{
+			currentLoadOperation.cancel(true);
+		}
+	}
+
 	public static void resetForRetry()
 	{
 		executeWithWriteLock(() -> {
@@ -144,69 +156,202 @@ public class FeedManager
 				throw new IllegalStateException("Cannot reset while feed loading is in progress");
 			}
 			clearState();
+			shutdownRequested = false;
 		});
 	}
 
 	public static void load(IProgressReporter progressReporter)
 	{
-		executeWithWriteLock(() -> {
-			if(loadState == LoadState.LOADING)
-			{
-				System.out.println("FeedManager.load() called while another load is in progress, skipping");
-				return;
-			}
+		CompletableFuture<Boolean> loadFuture = loadAsync(progressReporter);
 
-			if(loadState == LoadState.SUCCESS)
-			{
-				System.out.println("Feeds already loaded successfully, using cached results");
-				return;
-			}
-
-			loadState = LoadState.LOADING;
-			clearState();
-		});
-
-		boolean success = false;
 		try
 		{
-			String sig_format = "SHA256withRSA";
-			PublicKey pub_key = CryptoUtil.getFeedsPublicKey();
-
-			for(String mirror : DOWNLOAD_MIRRORS)
-			{
-				if(hasNonRetryableError())
-				{
-					break;
-				}
-
-				if(tryMirrorWithRetry(mirror, sig_format, pub_key, progressReporter))
-				{
-					success = true;
-					break;
-				}
-			}
-
-			boolean finalSuccess = success;
-			executeWithWriteLock(() -> {
-				if(finalSuccess)
-				{
-					loadState = LoadState.SUCCESS;
-					lastException = null;
-				}
-				else
-				{
-					loadState = LoadState.FAILED;
-					handleAllMirrorsFailed(progressReporter);
-				}
-			});
+			loadFuture.get();
 		}
-		catch(Exception e)
+		catch(InterruptedException e)
 		{
+			Thread.currentThread().interrupt();
 			executeWithWriteLock(() -> {
 				loadState = LoadState.FAILED;
 				lastException = e;
 			});
 		}
+		catch(ExecutionException e)
+		{
+			executeWithWriteLock(() -> {
+				loadState = LoadState.FAILED;
+				lastException = e.getCause();
+			});
+		}
+	}
+
+	public static CompletableFuture<Boolean> loadAsync(IProgressReporter progressReporter)
+	{
+		return executeWithWriteLock(() -> {
+			if(loadState == LoadState.LOADING && currentLoadOperation != null && !currentLoadOperation.isDone())
+			{
+				System.out.println("FeedManager.loadAsync() called while another load is in progress, returning existing operation");
+				return currentLoadOperation;
+			}
+
+			if(loadState == LoadState.SUCCESS)
+			{
+				System.out.println("Feeds already loaded successfully, using cached results");
+				return CompletableFuture.completedFuture(true);
+			}
+
+			loadState = LoadState.LOADING;
+			clearState();
+			shutdownRequested = false;
+
+			// Create and store the operation inside the lock to prevent race conditions
+			currentLoadOperation = createLoadOperation(progressReporter);
+			return currentLoadOperation;
+		});
+	}
+
+	private static CompletableFuture<Boolean> createLoadOperation(IProgressReporter progressReporter)
+	{
+		return CompletableFuture.supplyAsync(() -> {
+			String sig_format = "SHA256withRSA";
+			PublicKey pub_key = CryptoUtil.getFeedsPublicKey();
+
+			CompletableFuture<Boolean> result = tryAllMirrorsAsync(sig_format, pub_key, progressReporter);
+
+			try
+			{
+				boolean success = result.get();
+
+				executeWithWriteLock(() -> {
+					if(success)
+					{
+						loadState = LoadState.SUCCESS;
+						lastException = null;
+					}
+					else
+					{
+						loadState = LoadState.FAILED;
+						if(!shutdownRequested)
+						{
+							handleAllMirrorsFailed(progressReporter);
+						}
+					}
+				});
+
+				return success;
+			}
+			catch(InterruptedException e)
+			{
+				Thread.currentThread().interrupt();
+				executeWithWriteLock(() -> {
+					loadState = LoadState.FAILED;
+					lastException = e;
+				});
+				return false;
+			}
+			catch(ExecutionException e)
+			{
+				executeWithWriteLock(() -> {
+					loadState = LoadState.FAILED;
+					lastException = e.getCause();
+				});
+				return false;
+			}
+		});
+	}
+
+	private static CompletableFuture<Boolean> tryAllMirrorsAsync(String sig_format, PublicKey pub_key, IProgressReporter progressReporter)
+	{
+		CompletableFuture<Boolean> result = CompletableFuture.completedFuture(false);
+
+		for(String mirror : DOWNLOAD_MIRRORS)
+		{
+			result = result.thenCompose(success -> {
+				if(success || shutdownRequested || hasNonRetryableError())
+				{
+					return CompletableFuture.completedFuture(success);
+				}
+				return tryMirrorWithRetryAsync(mirror, sig_format, pub_key, progressReporter);
+			});
+		}
+
+		return result;
+	}
+
+	private static CompletableFuture<Boolean> tryMirrorWithRetryAsync(String mirror, String sig_format,
+																	  PublicKey pub_key, IProgressReporter progressReporter)
+	{
+		return tryMirrorAttemptAsync(mirror, sig_format, pub_key, progressReporter, 0);
+	}
+
+	private static CompletableFuture<Boolean> tryMirrorAttemptAsync(String mirror, String sig_format,
+																	PublicKey pub_key, IProgressReporter progressReporter, int attempt)
+	{
+		if(shutdownRequested)
+		{
+			return CompletableFuture.completedFuture(false);
+		}
+
+		if(attempt > 0)
+		{
+			progressReporter.showInfo("status.networking.retry_attempt", mirror, attempt);
+		}
+
+		return CompletableFuture
+				.supplyAsync(() -> tryMirror(mirror, sig_format, pub_key, progressReporter))
+				.exceptionally(error -> {
+					// Record the failure but preserve the exception for logging
+					recordFailure(mirror, error);
+					System.err.println("Mirror attempt failed for " + mirror + ": " + error.getMessage());
+					error.printStackTrace();
+					return false;
+				})
+				.thenCompose(success -> {
+					if(success || shutdownRequested || attempt >= MAX_RETRY_ATTEMPTS)
+					{
+						return CompletableFuture.completedFuture(success);
+					}
+
+					MirrorFailure lastFailure = getLastFailure();
+					if(lastFailure != null && !lastFailure.isRetryable())
+					{
+						return CompletableFuture.completedFuture(false);
+					}
+
+					long delay = calculateRetryDelay(attempt);
+
+					// Create delayed retry with shutdown check after delay
+					CompletableFuture<Boolean> delayedRetry = new CompletableFuture<>();
+					CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS).execute(() -> {
+						// Check if shutdown was requested during the delay
+						if(shutdownRequested)
+						{
+							delayedRetry.complete(false);
+						}
+						else
+						{
+							tryMirrorAttemptAsync(mirror, sig_format, pub_key, progressReporter, attempt + 1)
+									.whenComplete((result, ex) -> {
+										if(ex != null)
+										{
+											delayedRetry.completeExceptionally(ex);
+										}
+										else
+										{
+											delayedRetry.complete(result);
+										}
+									});
+						}
+					});
+
+					return delayedRetry;
+				});
+	}
+
+	private static long calculateRetryDelay(int attempt)
+	{
+		long delay = INITIAL_RETRY_DELAY_MS * (1L << attempt);
+		return Math.min(delay, MAX_RETRY_DELAY_MS);
 	}
 
 	private static void clearState()
@@ -217,6 +362,7 @@ public class FeedManager
 		lastException = null;
 		lastFailedMirror = null;
 		allFailures.clear();
+		currentLoadOperation = null;
 	}
 
 	private static boolean hasNonRetryableError()
@@ -259,47 +405,6 @@ public class FeedManager
 		});
 	}
 
-	private static boolean tryMirrorWithRetry(String mirror, String sig_format, PublicKey pub_key,
-											  IProgressReporter progressReporter)
-	{
-		int attempt = 0;
-		long retryDelay = INITIAL_RETRY_DELAY_MS;
-
-		while(attempt <= MAX_RETRY_ATTEMPTS)
-		{
-			try
-			{
-				if(attempt > 0)
-				{
-					retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY_MS);
-					sleepInterruptibly(retryDelay);
-					progressReporter.showInfo("status.networking.retry_attempt", mirror, attempt);
-				}
-
-				if(tryMirror(mirror, sig_format, pub_key, progressReporter))
-				{
-					return true;
-				}
-
-				MirrorFailure lastFailure = getLastFailure();
-				if(lastFailure != null && !lastFailure.isRetryable())
-				{
-					break;
-				}
-
-				attempt++;
-			}
-			catch(Exception e)
-			{
-				e.printStackTrace();
-				recordFailure(mirror, e);
-				break;
-			}
-		}
-
-		return false;
-	}
-
 	private static MirrorFailure getLastFailure()
 	{
 		return executeWithReadLock(() ->
@@ -307,23 +412,33 @@ public class FeedManager
 		);
 	}
 
-	private static void sleepInterruptibly(long millis) throws InterruptedException
-	{
-		Thread.sleep(millis);
-	}
-
 	private static boolean tryMirror(String mirror, String sig_format, PublicKey pub_key,
 									 IProgressReporter progressReporter)
 	{
 		try
 		{
+			if(shutdownRequested)
+			{
+				return false;
+			}
+
 			String baseUrl = mirror + "/" + Config.UPDATE_CHANNEL.name() + "/current/feeds/";
 
 			FeedData mainFeed = downloadAndVerifyFeed(baseUrl, "main_feed", sig_format, pub_key, progressReporter, mirror);
 			if(mainFeed == null) return false;
 
+			if(shutdownRequested)
+			{
+				return false;
+			}
+
 			FeedData updateFeed = downloadAndVerifyFeed(baseUrl, "update_feed", sig_format, pub_key, progressReporter, mirror);
 			if(updateFeed == null) return false;
+
+			if(shutdownRequested)
+			{
+				return false;
+			}
 
 			return processFeedData(mainFeed.content, updateFeed.content);
 		}
@@ -340,6 +455,11 @@ public class FeedManager
 												  PublicKey pub_key, IProgressReporter progressReporter,
 												  String mirror) throws Exception
 	{
+		if(shutdownRequested)
+		{
+			return null;
+		}
+
 		CompletableFuture<HttpResponse<InputStream>> feedResponse =
 				Util.getUrlAsync(LauncherUtils.httpClient, baseUrl + feedName + ".txt")
 						.orTimeout(HTTP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -364,10 +484,33 @@ public class FeedManager
 			return null;
 		}
 
-		byte[] feedRaw, sigRaw;
-		try(InputStream feedIs = feedResponse.get().body();
-			InputStream sigIs = signatureResponse.get().body())
+		if(shutdownRequested)
 		{
+			return null;
+		}
+
+		// Add null checks for HTTP responses
+		HttpResponse<InputStream> feedResp = feedResponse.get();
+		HttpResponse<InputStream> sigResp = signatureResponse.get();
+
+		if(feedResp == null || sigResp == null)
+		{
+			progressReporter.showInfo("status.networking.feed_load_failed_alt", mirror, "NULL_RESPONSE");
+			recordFailure(mirror, new IOException("Null response from server"));
+			return null;
+		}
+
+		byte[] feedRaw, sigRaw;
+		try(InputStream feedIs = feedResp.body();
+			InputStream sigIs = sigResp.body())
+		{
+			if(feedIs == null || sigIs == null)
+			{
+				progressReporter.showInfo("status.networking.feed_load_failed_alt", mirror, "NULL_BODY");
+				recordFailure(mirror, new IOException("Null response body from server"));
+				return null;
+			}
+
 			feedRaw = feedIs.readAllBytes();
 			sigRaw = sigIs.readAllBytes();
 		}

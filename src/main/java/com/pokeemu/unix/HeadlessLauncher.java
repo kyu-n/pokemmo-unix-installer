@@ -2,10 +2,12 @@ package com.pokeemu.unix;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.pokeemu.unix.config.Config;
@@ -20,6 +22,7 @@ public class HeadlessLauncher
 	private Throwable networkException = null;
 
 	private volatile ScheduledExecutorService feedMonitor;
+	private volatile CompletableFuture<Boolean> feedLoadFuture;
 
 	public boolean tryLaunchWithoutUI()
 	{
@@ -105,45 +108,87 @@ public class HeadlessLauncher
 			localFeedMonitor = Executors.newSingleThreadScheduledExecutor();
 			feedMonitor = localFeedMonitor;
 
+			// Start the async feed loading
+			feedLoadFuture = FeedManager.loadAsync(new FeedManager.HeadlessProgressReporter());
+
+			// Schedule timeout handler
 			localFeedMonitor.schedule(() -> {
-				if(!FeedManager.isSuccessful())
+				if(feedLoadFuture != null && !feedLoadFuture.isDone())
 				{
 					feedsTimedOut.set(true);
 					setNeedsUI("Network operations taking too long (>3 seconds)");
+
+					// Request shutdown of feed loading
+					FeedManager.requestShutdown();
+
+					// Cancel the future
+					feedLoadFuture.cancel(true);
 				}
 			}, 3, TimeUnit.SECONDS);
 
-			FeedManager.load(new FeedManager.HeadlessProgressReporter());
-
-			if(!FeedManager.isSuccessful())
+			try
 			{
-				networkException = FeedManager.getLastException();
+				// Wait for feed loading with a total timeout of 5 seconds
+				success = feedLoadFuture.get(5, TimeUnit.SECONDS);
 
-				if(networkException == null)
+				if(success && !feedsTimedOut.get())
 				{
-					networkException = new Exception("Failed to download update feeds from all mirrors");
+					System.out.println("Feeds downloaded successfully");
 				}
-
-				if(!feedsTimedOut.get())
+				else if(!FeedManager.isSuccessful())
 				{
-					String errorDetails = "Network Error: " + networkException.getMessage();
-					setNeedsUI(errorDetails);
+					networkException = FeedManager.getLastException();
+
+					if(networkException == null)
+					{
+						networkException = new Exception("Failed to download update feeds from all mirrors");
+					}
+
+					if(!feedsTimedOut.get())
+					{
+						String errorDetails = "Network Error: " + networkException.getMessage();
+						setNeedsUI(errorDetails);
+					}
 				}
 			}
-			else if(feedsTimedOut.get())
+			catch(TimeoutException e)
 			{
+				feedsTimedOut.set(true);
+				FeedManager.requestShutdown();
+
+				if(feedLoadFuture != null)
+				{
+					feedLoadFuture.cancel(true);
+				}
+
+				networkException = e;
+				setNeedsUI("Feed download timed out");
 			}
-			else
+			catch(InterruptedException e)
 			{
-				System.out.println("Feeds downloaded successfully");
-				success = true;
+				Thread.currentThread().interrupt();
+				FeedManager.requestShutdown();
+
+				if(feedLoadFuture != null)
+				{
+					feedLoadFuture.cancel(true);
+				}
+
+				networkException = e;
+				setNeedsUI("Feed download interrupted");
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				networkException = e;
+				setNeedsUI("Feed download exception: " + e.getMessage());
 			}
 		}
 		catch(Exception e)
 		{
 			e.printStackTrace();
 			networkException = e;
-			setNeedsUI("Feed download exception: " + e.getMessage());
+			setNeedsUI("Unexpected error during feed download: " + e.getMessage());
 		}
 		finally
 		{
@@ -152,9 +197,10 @@ public class HeadlessLauncher
 				shutdownExecutor(localFeedMonitor, "Feed Monitor", 1);
 			}
 			feedMonitor = null;
+			feedLoadFuture = null;
 		}
 
-		return success;
+		return success && !feedsTimedOut.get();
 	}
 
 	private void setNeedsUI(String reason)
@@ -165,6 +211,17 @@ public class HeadlessLauncher
 
 	private void shutdown()
 	{
+		// Request shutdown of any ongoing feed operations
+		FeedManager.requestShutdown();
+
+		// Cancel feed loading if still running
+		if(feedLoadFuture != null && !feedLoadFuture.isDone())
+		{
+			feedLoadFuture.cancel(true);
+			feedLoadFuture = null;
+		}
+
+		// Shutdown the monitor executor
 		ScheduledExecutorService monitor = feedMonitor;
 		if(monitor != null)
 		{

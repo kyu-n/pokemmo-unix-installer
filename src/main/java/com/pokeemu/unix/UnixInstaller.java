@@ -135,6 +135,9 @@ public class UnixInstaller extends Application
 			return;
 		}
 
+		// Request shutdown of async feed operations
+		FeedManager.requestShutdown();
+
 		try
 		{
 			Config.save();

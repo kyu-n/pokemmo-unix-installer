@@ -32,11 +32,6 @@ public class MainWindow
 	private static final float STATUS_PANEL_HEIGHT = 60.0f;
 	private static final float BOTTOM_PANEL_HEIGHT = 40.0f;
 
-	private static final float[] COLOR_ERROR = {1.0f, 0.3f, 0.3f, 1.0f};
-	private static final float[] COLOR_WARNING = {1.0f, 0.8f, 0.3f, 1.0f};
-	private static final float[] COLOR_SUCCESS = {0.3f, 1.0f, 0.3f, 1.0f};
-	private static final float[] COLOR_INFO = {0.7f, 0.7f, 1.0f, 1.0f};
-
 	private static class TaskLine
 	{
 		final String text;
@@ -123,7 +118,11 @@ public class MainWindow
 		if(dlSpeed != null && !dlSpeed.isEmpty() && !dlSpeed.equals("0 B/s"))
 		{
 			ImGui.sameLine();
-			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, COLOR_INFO[0], COLOR_INFO[1], COLOR_INFO[2], COLOR_INFO[3]);
+			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text,
+					ImGuiStyleManager.COLOR_INFO[0],
+					ImGuiStyleManager.COLOR_INFO[1],
+					ImGuiStyleManager.COLOR_INFO[2],
+					ImGuiStyleManager.COLOR_INFO[3]);
 			ImGui.text("[" + dlSpeed + "]");
 			ImGui.popStyleColor();
 		}
@@ -232,24 +231,30 @@ public class MainWindow
 
 		for(TaskLine taskLine : snapshot)
 		{
+			float[] color = null;
 			switch(taskLine.level)
 			{
 				case ERROR:
-					ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, COLOR_ERROR[0], COLOR_ERROR[1], COLOR_ERROR[2], COLOR_ERROR[3]);
+					color = ImGuiStyleManager.COLOR_ERROR;
 					break;
 				case WARNING:
-					ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, COLOR_WARNING[0], COLOR_WARNING[1], COLOR_WARNING[2], COLOR_WARNING[3]);
+					color = ImGuiStyleManager.COLOR_WARNING;
 					break;
 				case SUCCESS:
-					ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, COLOR_SUCCESS[0], COLOR_SUCCESS[1], COLOR_SUCCESS[2], COLOR_SUCCESS[3]);
+					color = ImGuiStyleManager.COLOR_SUCCESS;
 					break;
 				default:
 					break;
 			}
 
+			if(color != null)
+			{
+				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, color[0], color[1], color[2], color[3]);
+			}
+
 			ImGui.textUnformatted(taskLine.text);
 
-			if(taskLine.level != LogLevel.INFO)
+			if(color != null)
 			{
 				ImGui.popStyleColor();
 			}
@@ -280,9 +285,21 @@ public class MainWindow
 			ImGui.pushStyleVar(imgui.flag.ImGuiStyleVar.Alpha, 0.6f);
 		}
 
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button, 0.1f, 0.4f, 0.1f, 1.0f);
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered, 0.2f, 0.5f, 0.2f, 1.0f);
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonActive, 0.15f, 0.45f, 0.15f, 1.0f);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button,
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS[0],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS[1],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS[2],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS[3]);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered,
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_HOVER[0],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_HOVER[1],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_HOVER[2],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_HOVER[3]);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonActive,
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_ACTIVE[0],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_ACTIVE[1],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_ACTIVE[2],
+				ImGuiStyleManager.COLOR_BUTTON_SUCCESS_ACTIVE[3]);
 
 		boolean shouldLaunch = ImGui.button(Config.getString("main.launch"), buttonWidth, BUTTON_HEIGHT);
 
@@ -314,6 +331,7 @@ public class MainWindow
 
 		ImGui.endChild();
 	}
+
 	public void setCanStart(boolean canStart)
 	{
 		this.canStart.set(canStart);

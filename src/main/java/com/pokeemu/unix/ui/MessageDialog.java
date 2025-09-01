@@ -127,13 +127,21 @@ public class MessageDialog extends AbstractModalWindow
 		switch(currentType)
 		{
 			case ERROR -> {
-				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.2f, 0.2f, 1.0f);
+				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text,
+						ImGuiStyleManager.COLOR_TEXT_ERROR[0],
+						ImGuiStyleManager.COLOR_TEXT_ERROR[1],
+						ImGuiStyleManager.COLOR_TEXT_ERROR[2],
+						ImGuiStyleManager.COLOR_TEXT_ERROR[3]);
 				ImGui.text("[!] ");
 				ImGui.popStyleColor();
 				ImGui.sameLine();
 			}
 			case WARNING -> {
-				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.8f, 0.0f, 1.0f);
+				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text,
+						ImGuiStyleManager.COLOR_TEXT_WARNING[0],
+						ImGuiStyleManager.COLOR_TEXT_WARNING[1],
+						ImGuiStyleManager.COLOR_TEXT_WARNING[2],
+						ImGuiStyleManager.COLOR_TEXT_WARNING[3]);
 				ImGui.text("[!] ");
 				ImGui.popStyleColor();
 				ImGui.sameLine();

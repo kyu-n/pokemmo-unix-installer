@@ -8,6 +8,34 @@ import imgui.flag.ImGuiCol;
 
 public class ImGuiStyleManager
 {
+	// Color constants for UI elements
+
+	// Status colors
+	public static float[] COLOR_ERROR = new float[4];
+	public static float[] COLOR_WARNING = new float[4];
+	public static float[] COLOR_SUCCESS = new float[4];
+	public static float[] COLOR_INFO = new float[4];
+
+	// Button state colors
+	public static float[] COLOR_BUTTON_SUCCESS = new float[4];
+	public static float[] COLOR_BUTTON_SUCCESS_HOVER = new float[4];
+	public static float[] COLOR_BUTTON_SUCCESS_ACTIVE = new float[4];
+
+	public static float[] COLOR_BUTTON_DANGER = new float[4];
+	public static float[] COLOR_BUTTON_DANGER_HOVER = new float[4];
+	public static float[] COLOR_BUTTON_DANGER_ACTIVE = new float[4];
+
+	// Text colors
+	public static float[] COLOR_TEXT_ERROR = new float[4];
+	public static float[] COLOR_TEXT_WARNING = new float[4];
+	public static float[] COLOR_TEXT_SUCCESS = new float[4];
+	public static float[] COLOR_TEXT_INFO = new float[4];
+	public static float[] COLOR_TEXT_MUTED = new float[4];
+
+	// Special UI colors
+	public static float[] COLOR_UPDATING_STATUS = new float[4];
+	public static float[] COLOR_COPIED_FEEDBACK = new float[4];
+	public static float[] COLOR_COPIED_FEEDBACK_HOVER = new float[4];
 
 	private static void setColor(ImGuiStyle style, int colFlag, int argb)
 	{
@@ -23,17 +51,89 @@ public class ImGuiStyleManager
 		style.setColor(colFlag, r, g, b, a);
 	}
 
+	private static void setColorArray(float[] target, float r, float g, float b, float a)
+	{
+		target[0] = r;
+		target[1] = g;
+		target[2] = b;
+		target[3] = a;
+	}
+
 	public static void applySystemTheme()
 	{
 		boolean darkMode = GnomeThemeDetector.isDark();
 		if(darkMode)
 		{
 			applySpectrumDark();
+			applyDarkThemeColors();
 		}
 		else
 		{
 			applySpectrumLight();
+			applyLightThemeColors();
 		}
+	}
+
+	private static void applyLightThemeColors()
+	{
+		// Status colors - vibrant for light theme
+		setColorArray(COLOR_ERROR, 0.9f, 0.2f, 0.2f, 1.0f);
+		setColorArray(COLOR_WARNING, 0.9f, 0.7f, 0.0f, 1.0f);
+		setColorArray(COLOR_SUCCESS, 0.2f, 0.7f, 0.2f, 1.0f);
+		setColorArray(COLOR_INFO, 0.3f, 0.5f, 0.9f, 1.0f);
+
+		// Button colors - Success (pastel mint green)
+		setColorArray(COLOR_BUTTON_SUCCESS, 0.7f, 0.85f, 0.7f, 1.0f);
+		setColorArray(COLOR_BUTTON_SUCCESS_HOVER, 0.65f, 0.82f, 0.65f, 1.0f);
+		setColorArray(COLOR_BUTTON_SUCCESS_ACTIVE, 0.75f, 0.88f, 0.75f, 1.0f);
+
+		// Button colors - Danger (pastel coral/pink)
+		setColorArray(COLOR_BUTTON_DANGER, 0.9f, 0.7f, 0.7f, 1.0f);
+		setColorArray(COLOR_BUTTON_DANGER_HOVER, 0.87f, 0.65f, 0.65f, 1.0f);
+		setColorArray(COLOR_BUTTON_DANGER_ACTIVE, 0.93f, 0.75f, 0.75f, 1.0f);
+
+		// Text colors
+		setColorArray(COLOR_TEXT_ERROR, 1.0f, 0.2f, 0.2f, 1.0f);
+		setColorArray(COLOR_TEXT_WARNING, 1.0f, 0.8f, 0.0f, 1.0f);
+		setColorArray(COLOR_TEXT_SUCCESS, 0.0f, 0.7f, 0.0f, 1.0f);
+		setColorArray(COLOR_TEXT_INFO, 0.4f, 0.6f, 1.0f, 1.0f);
+		setColorArray(COLOR_TEXT_MUTED, 0.6f, 0.6f, 0.6f, 1.0f);
+
+		// Special UI colors
+		setColorArray(COLOR_UPDATING_STATUS, 1.0f, 0.8f, 0.0f, 1.0f);
+		setColorArray(COLOR_COPIED_FEEDBACK, 0.0f, 0.6f, 0.0f, 1.0f);
+		setColorArray(COLOR_COPIED_FEEDBACK_HOVER, 0.0f, 0.7f, 0.0f, 1.0f);
+	}
+
+	private static void applyDarkThemeColors()
+	{
+		// Status colors - slightly muted for dark theme
+		setColorArray(COLOR_ERROR, 1.0f, 0.3f, 0.3f, 1.0f);
+		setColorArray(COLOR_WARNING, 1.0f, 0.8f, 0.3f, 1.0f);
+		setColorArray(COLOR_SUCCESS, 0.3f, 1.0f, 0.3f, 1.0f);
+		setColorArray(COLOR_INFO, 0.7f, 0.7f, 1.0f, 1.0f);
+
+		// Button colors - Success (dark muted green for better contrast with white text)
+		setColorArray(COLOR_BUTTON_SUCCESS, 0.2f, 0.35f, 0.2f, 1.0f);
+		setColorArray(COLOR_BUTTON_SUCCESS_HOVER, 0.25f, 0.4f, 0.25f, 1.0f);
+		setColorArray(COLOR_BUTTON_SUCCESS_ACTIVE, 0.18f, 0.32f, 0.18f, 1.0f);
+
+		// Button colors - Danger (dark muted red for better contrast with white text)
+		setColorArray(COLOR_BUTTON_DANGER, 0.35f, 0.2f, 0.2f, 1.0f);
+		setColorArray(COLOR_BUTTON_DANGER_HOVER, 0.4f, 0.25f, 0.25f, 1.0f);
+		setColorArray(COLOR_BUTTON_DANGER_ACTIVE, 0.32f, 0.18f, 0.18f, 1.0f);
+
+		// Text colors
+		setColorArray(COLOR_TEXT_ERROR, 1.0f, 0.3f, 0.3f, 1.0f);
+		setColorArray(COLOR_TEXT_WARNING, 1.0f, 0.8f, 0.0f, 1.0f);
+		setColorArray(COLOR_TEXT_SUCCESS, 0.3f, 1.0f, 0.3f, 1.0f);
+		setColorArray(COLOR_TEXT_INFO, 0.7f, 0.7f, 1.0f, 1.0f);
+		setColorArray(COLOR_TEXT_MUTED, 0.7f, 0.7f, 0.7f, 1.0f);
+
+		// Special UI colors
+		setColorArray(COLOR_UPDATING_STATUS, 1.0f, 0.8f, 0.0f, 1.0f);
+		setColorArray(COLOR_COPIED_FEEDBACK, 0.0f, 0.5f, 0.0f, 1.0f);
+		setColorArray(COLOR_COPIED_FEEDBACK_HOVER, 0.0f, 0.6f, 0.0f, 1.0f);
 	}
 
 	private static void applyCommonStyle(ImGuiStyle style)

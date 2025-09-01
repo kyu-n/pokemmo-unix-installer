@@ -186,15 +186,14 @@ public class ErrorDialog extends AbstractModalWindow
 	@Override
 	protected void renderTitleBar()
 	{
-		float r = 1.0f, g = 0.3f, b = 0.3f; // Default red for errors
+		float[] titleColor = ImGuiStyleManager.COLOR_TEXT_ERROR;
 
 		if(errorType == ErrorType.IO)
 		{
-			// Orange for I/O errors
-			g = 0.5f;
+			titleColor = ImGuiStyleManager.COLOR_TEXT_WARNING;
 		}
 
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, r, g, b, 1.0f);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, titleColor[0], titleColor[1], titleColor[2], titleColor[3]);
 		String titleText = getTitle();
 		float titleWidth = ImGui.calcTextSize(titleText).x;
 		float windowWidth = ImGui.getWindowWidth();
@@ -272,8 +271,16 @@ public class ErrorDialog extends AbstractModalWindow
 
 		if(justCopied)
 		{
-			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button, 0.0f, 0.5f, 0.0f, 1.0f);
-			ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered, 0.0f, 0.6f, 0.0f, 1.0f);
+			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button,
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK[0],
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK[1],
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK[2],
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK[3]);
+			ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered,
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK_HOVER[0],
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK_HOVER[1],
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK_HOVER[2],
+					ImGuiStyleManager.COLOR_COPIED_FEEDBACK_HOVER[3]);
 			ImGui.button(Config.getString("button.copied"), buttonWidth, BUTTON_HEIGHT);
 			ImGui.popStyleColor(2);
 		}
@@ -300,9 +307,21 @@ public class ErrorDialog extends AbstractModalWindow
 			ImGui.sameLine();
 		}
 
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button, 0.5f, 0.0f, 0.0f, 1.0f);
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered, 0.7f, 0.0f, 0.0f, 1.0f);
-		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonActive, 0.4f, 0.0f, 0.0f, 1.0f);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.Button,
+				ImGuiStyleManager.COLOR_BUTTON_DANGER[0],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER[1],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER[2],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER[3]);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonHovered,
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_HOVER[0],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_HOVER[1],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_HOVER[2],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_HOVER[3]);
+		ImGui.pushStyleColor(imgui.flag.ImGuiCol.ButtonActive,
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_ACTIVE[0],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_ACTIVE[1],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_ACTIVE[2],
+				ImGuiStyleManager.COLOR_BUTTON_DANGER_ACTIVE[3]);
 		if(ImGui.button(Config.getString("button.exit"), buttonWidth, BUTTON_HEIGHT))
 		{
 			System.exit(errorType.exitCode);

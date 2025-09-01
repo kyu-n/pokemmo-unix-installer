@@ -256,7 +256,12 @@ public class ConfigWindow extends AbstractModalWindow
 		{
 			ImGui.endDisabled();
 			ImGui.sameLine();
-			ImGui.textColored(1.0f, 0.8f, 0.0f, 1.0f, Config.getString("status.updating"));
+			ImGui.textColored(
+					ImGuiStyleManager.COLOR_UPDATING_STATUS[0],
+					ImGuiStyleManager.COLOR_UPDATING_STATUS[1],
+					ImGuiStyleManager.COLOR_UPDATING_STATUS[2],
+					ImGuiStyleManager.COLOR_UPDATING_STATUS[3],
+					Config.getString("status.updating"));
 		}
 	}
 

@@ -3,15 +3,19 @@ package com.pokeemu.unix.ui;
 import java.util.LinkedList;
 import java.util.Queue;
 
+import com.pokeemu.unix.UnixInstaller;
+
+import com.pokeemu.unix.config.Config;
+
 import imgui.ImGui;
-import imgui.ImVec2;
 import imgui.flag.ImGuiWindowFlags;
 
-public class MessageDialog
+public class MessageDialog extends AbstractModalWindow
 {
-	private static final MessageDialog INSTANCE = new MessageDialog();
+	private static MessageDialog INSTANCE;
 
-	private volatile boolean showDialog = false;
+	private UnixInstaller parent;
+
 	private ImGuiThreadBridge.DialogType currentType;
 	private String currentMessage;
 	private String currentTitle;
@@ -20,242 +24,209 @@ public class MessageDialog
 
 	private final Queue<QueuedDialog> dialogQueue = new LinkedList<>();
 
-	private static final String POPUP_INFO = "InfoDialog";
-	private static final String POPUP_ERROR = "ErrorDialog";
-	private static final String POPUP_YES_NO = "YesNoDialog";
+	private static final String POPUP_INFO = "##InfoDialog";
+	private static final String POPUP_ERROR = "##ErrorDialog";
+	private static final String POPUP_YES_NO = "##YesNoDialog";
+	private static final String POPUP_WARNING = "##WarningDialog";
 
-	private static final float MIN_DIALOG_WIDTH = 400.0f;
-	private static final float MAX_DIALOG_WIDTH = 600.0f;
-	private static final float BUTTON_WIDTH = 120.0f;
+	private static final float MIN_WIDTH = 400.0f;
+	private static final float MAX_WIDTH = 600.0f;
 
 	private MessageDialog()
 	{
+		super(POPUP_INFO, 500, 200);
+
+		this.isResizable = true;
+		this.hasTitleBar = false;
+		this.centerOnAppear = true;
 	}
 
 	public static MessageDialog getInstance()
 	{
+		if(INSTANCE == null)
+		{
+			INSTANCE = new MessageDialog();
+		}
+
 		return INSTANCE;
 	}
 
+	public void setParent(UnixInstaller parent)
+	{
+		this.parent = parent;
+	}
+
+	@Override
 	public void render()
 	{
-		if(!showDialog && !dialogQueue.isEmpty())
+		if(parent != null)
+		{
+			boolean otherModalOpen = (parent.getConfigWindow() != null && parent.getConfigWindow().isVisible()) ||
+					(parent.getNetworkErrorDialog() != null && parent.getNetworkErrorDialog().isVisible());
+
+			if(otherModalOpen)
+			{
+				return;
+			}
+		}
+
+		if(dialogState == DialogState.CLOSED && !dialogQueue.isEmpty())
 		{
 			QueuedDialog next = dialogQueue.poll();
 			if(next != null)
 			{
-				showDialogInternal(next.type, next.message, next.title, next.onYes, next.onNo);
+				showDialog(next.type, next.message, next.title, next.onYes, next.onNo);
 			}
 		}
 
-		if(!showDialog)
+		super.render();
+	}
+
+	@Override
+	protected void setupWindow()
+	{
+		if(centerOnAppear)
 		{
-			return;
+			imgui.ImVec2 center = ImGui.getMainViewport().getCenter();
+			ImGui.setNextWindowPos(center.x, center.y,
+					imgui.flag.ImGuiCond.Appearing, 0.5f, 0.5f);
 		}
 
-		if(currentType != null)
+		ImGui.setNextWindowSizeConstraints(MIN_WIDTH, 0, MAX_WIDTH, Float.MAX_VALUE);
+	}
+
+	@Override
+	protected int buildWindowFlags()
+	{
+		return ImGuiWindowFlags.AlwaysAutoResize |
+				ImGuiWindowFlags.NoSavedSettings |
+				ImGuiWindowFlags.NoTitleBar |
+				ImGuiWindowFlags.NoMove;
+	}
+
+	@Override
+	protected String getTitle()
+	{
+		return currentTitle != null ? currentTitle : "Message";
+	}
+
+	@Override
+	protected void renderTitleBar()
+	{
+		switch(currentType)
 		{
-			switch(currentType)
-			{
-				case INFO -> renderInfoDialog();
-				case ERROR -> renderErrorDialog();
-				case YES_NO -> renderYesNoDialog();
-				case WARNING -> renderWarningDialog();
+			case ERROR -> {
+				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.2f, 0.2f, 1.0f);
+				ImGui.text("[!] ");
+				ImGui.popStyleColor();
+				ImGui.sameLine();
 			}
+			case WARNING -> {
+				ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.8f, 0.0f, 1.0f);
+				ImGui.text("[!] ");
+				ImGui.popStyleColor();
+				ImGui.sameLine();
+			}
+			default -> {
+				// INFO and YES_NO use normal text
+			}
+		}
+
+		ImGui.text(getTitle());
+	}
+
+	@Override
+	protected void renderContent()
+	{
+		ImGui.pushTextWrapPos(ImGui.getCursorPosX() + MIN_WIDTH);
+		ImGui.textWrapped(currentMessage != null ? currentMessage : "");
+		ImGui.popTextWrapPos();
+
+		ImGui.spacing();
+	}
+
+	@Override
+	protected boolean hasFooter()
+	{
+		return true;
+	}
+
+	@Override
+	protected void renderFooter()
+	{
+		if(currentType == ImGuiThreadBridge.DialogType.YES_NO)
+		{
+			renderYesNoButtons();
+		}
+		else
+		{
+			renderOkButton();
 		}
 	}
 
-	private void renderInfoDialog()
+	private void renderOkButton()
 	{
-		if(!ImGui.isPopupOpen(POPUP_INFO))
+		float buttonPosX = (ImGui.getWindowWidth() - BUTTON_WIDTH) * 0.5f;
+		ImGui.setCursorPosX(buttonPosX);
+
+		if(ImGui.button(Config.getString("button.ok"), BUTTON_WIDTH, BUTTON_HEIGHT))
 		{
-			ImGui.openPopup(POPUP_INFO);
-		}
-
-		ImVec2 center = ImGui.getMainViewport().getCenter();
-		ImGui.setNextWindowPos(center.x, center.y, imgui.flag.ImGuiCond.Appearing, 0.5f, 0.5f);
-		ImGui.setNextWindowSizeConstraints(MIN_DIALOG_WIDTH, 0, MAX_DIALOG_WIDTH, Float.MAX_VALUE);
-
-		if(ImGui.beginPopupModal(POPUP_INFO, null,
-				ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
-		{
-
-			ImGui.text(currentTitle != null ? currentTitle : "Information");
-			ImGui.separator();
-
-			ImGui.pushTextWrapPos(ImGui.getCursorPosX() + MIN_DIALOG_WIDTH);
-			ImGui.textWrapped(currentMessage != null ? currentMessage : "");
-			ImGui.popTextWrapPos();
-
-			ImGui.spacing();
-			ImGui.separator();
-			ImGui.spacing();
-
-			float buttonPosX = (ImGui.getWindowWidth() - BUTTON_WIDTH) * 0.5f;
-			ImGui.setCursorPosX(buttonPosX);
-
-			if(ImGui.button("OK", BUTTON_WIDTH, 0))
-			{
-				closeDialog();
-				ImGui.closeCurrentPopup();
-			}
-
-			ImGui.endPopup();
+			handleOk();
 		}
 	}
 
-	private void renderErrorDialog()
+	private void renderYesNoButtons()
 	{
-		if(!ImGui.isPopupOpen(POPUP_ERROR))
+		float totalButtonWidth = BUTTON_WIDTH * 2 + ImGui.getStyle().getItemSpacingX();
+		float buttonPosX = (ImGui.getWindowWidth() - totalButtonWidth) * 0.5f;
+		ImGui.setCursorPosX(buttonPosX);
+
+		if(ImGui.button(Config.getString("button.yes"), BUTTON_WIDTH, BUTTON_HEIGHT))
 		{
-			ImGui.openPopup(POPUP_ERROR);
+			handleYes();
 		}
 
-		ImVec2 center = ImGui.getMainViewport().getCenter();
-		ImGui.setNextWindowPos(center.x, center.y, imgui.flag.ImGuiCond.Appearing, 0.5f, 0.5f);
-		ImGui.setNextWindowSizeConstraints(MIN_DIALOG_WIDTH, 0, MAX_DIALOG_WIDTH, Float.MAX_VALUE);
+		ImGui.sameLine();
 
-		if(ImGui.beginPopupModal(POPUP_ERROR, null,
-				ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
+		if(ImGui.button(Config.getString("button.no"), BUTTON_WIDTH, BUTTON_HEIGHT))
 		{
-			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.2f, 0.2f, 1.0f);
-			ImGui.text("[!] ");
-			ImGui.popStyleColor();
-
-			ImGui.sameLine();
-			ImGui.text(currentTitle != null ? currentTitle : "Error");
-			ImGui.separator();
-
-			ImGui.pushTextWrapPos(ImGui.getCursorPosX() + MIN_DIALOG_WIDTH);
-			ImGui.textWrapped(currentMessage != null ? currentMessage : "");
-			ImGui.popTextWrapPos();
-
-			ImGui.spacing();
-			ImGui.separator();
-			ImGui.spacing();
-
-			float buttonPosX = (ImGui.getWindowWidth() - BUTTON_WIDTH) * 0.5f;
-			ImGui.setCursorPosX(buttonPosX);
-
-			if(ImGui.button("OK", BUTTON_WIDTH, 0))
-			{
-				closeDialog();
-				ImGui.closeCurrentPopup();
-			}
-
-			ImGui.endPopup();
+			handleNo();
 		}
 	}
 
-	private void renderYesNoDialog()
+	private void handleOk()
 	{
-		if(!ImGui.isPopupOpen(POPUP_YES_NO))
-		{
-			ImGui.openPopup(POPUP_YES_NO);
-		}
-
-		ImVec2 center = ImGui.getMainViewport().getCenter();
-		ImGui.setNextWindowPos(center.x, center.y, imgui.flag.ImGuiCond.Appearing, 0.5f, 0.5f);
-		ImGui.setNextWindowSizeConstraints(MIN_DIALOG_WIDTH, 0, MAX_DIALOG_WIDTH, Float.MAX_VALUE);
-
-		if(ImGui.beginPopupModal(POPUP_YES_NO, null,
-				ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
-		{
-
-			ImGui.text(currentTitle != null ? currentTitle : "Confirm");
-			ImGui.separator();
-
-			ImGui.pushTextWrapPos(ImGui.getCursorPosX() + MIN_DIALOG_WIDTH);
-			ImGui.textWrapped(currentMessage != null ? currentMessage : "");
-			ImGui.popTextWrapPos();
-
-			ImGui.spacing();
-			ImGui.separator();
-			ImGui.spacing();
-
-			float totalButtonWidth = BUTTON_WIDTH * 2 + ImGui.getStyle().getItemSpacingX();
-			float buttonPosX = (ImGui.getWindowWidth() - totalButtonWidth) * 0.5f;
-			ImGui.setCursorPosX(buttonPosX);
-
-			if(ImGui.button("Yes", BUTTON_WIDTH, 0))
-			{
-				if(onYes != null)
-				{
-					onYes.run();
-				}
-				closeDialog();
-				ImGui.closeCurrentPopup();
-			}
-
-			ImGui.sameLine();
-
-			if(ImGui.button("No", BUTTON_WIDTH, 0))
-			{
-				if(onNo != null)
-				{
-					onNo.run();
-				}
-				closeDialog();
-				ImGui.closeCurrentPopup();
-			}
-
-			ImGui.endPopup();
-		}
-	}
-
-	private void renderWarningDialog()
-	{
-		if(!ImGui.isPopupOpen(POPUP_INFO))
-		{
-			ImGui.openPopup(POPUP_INFO);
-		}
-
-		ImVec2 center = ImGui.getMainViewport().getCenter();
-		ImGui.setNextWindowPos(center.x, center.y, imgui.flag.ImGuiCond.Appearing, 0.5f, 0.5f);
-		ImGui.setNextWindowSizeConstraints(MIN_DIALOG_WIDTH, 0, MAX_DIALOG_WIDTH, Float.MAX_VALUE);
-
-		if(ImGui.beginPopupModal(POPUP_INFO, null,
-				ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings))
-		{
-
-			ImGui.pushStyleColor(imgui.flag.ImGuiCol.Text, 1.0f, 0.8f, 0.0f, 1.0f);
-			ImGui.text("[!] ");
-			ImGui.popStyleColor();
-
-			ImGui.sameLine();
-			ImGui.text(currentTitle != null ? currentTitle : "Warning");
-			ImGui.separator();
-
-			ImGui.pushTextWrapPos(ImGui.getCursorPosX() + MIN_DIALOG_WIDTH);
-			ImGui.textWrapped(currentMessage != null ? currentMessage : "");
-			ImGui.popTextWrapPos();
-
-			ImGui.spacing();
-			ImGui.separator();
-			ImGui.spacing();
-
-			float buttonPosX = (ImGui.getWindowWidth() - BUTTON_WIDTH) * 0.5f;
-			ImGui.setCursorPosX(buttonPosX);
-
-			if(ImGui.button("OK", BUTTON_WIDTH, 0))
-			{
-				closeDialog();
-				ImGui.closeCurrentPopup();
-			}
-
-			ImGui.endPopup();
-		}
-	}
-
-	private void closeDialog()
-	{
-		showDialog = false;
-
 		if(onYes != null && currentType != ImGuiThreadBridge.DialogType.YES_NO)
 		{
 			onYes.run();
 		}
 
+		close();
+	}
+
+	private void handleYes()
+	{
+		if(onYes != null)
+		{
+			onYes.run();
+		}
+
+		close();
+	}
+
+	private void handleNo()
+	{
+		if(onNo != null)
+		{
+			onNo.run();
+		}
+
+		close();
+	}
+
+	@Override
+	protected void onClose()
+	{
 		currentType = null;
 		currentMessage = null;
 		currentTitle = null;
@@ -271,25 +242,56 @@ public class MessageDialog
 			return;
 		}
 
-		if(showDialog)
+		switch(type)
+		{
+			case INFO -> this.popupId = POPUP_INFO;
+			case ERROR -> this.popupId = POPUP_ERROR;
+			case YES_NO -> this.popupId = POPUP_YES_NO;
+			case WARNING -> this.popupId = POPUP_WARNING;
+		}
+
+		if(parent != null)
+		{
+			if(parent.getConfigWindow() != null && parent.getConfigWindow().isVisible())
+			{
+				parent.getConfigWindow().forceClose();
+			}
+		}
+
+		if(isVisible())
 		{
 			dialogQueue.offer(new QueuedDialog(type, message, title, onYes, onNo));
 		}
 		else
 		{
-			showDialogInternal(type, message, title, onYes, onNo);
+			this.currentType = type;
+			this.currentMessage = message;
+			this.currentTitle = title;
+			this.onYes = onYes;
+			this.onNo = onNo;
+
+			super.show();
 		}
 	}
 
-	private void showDialogInternal(ImGuiThreadBridge.DialogType type, String message,
-									String title, Runnable onYes, Runnable onNo)
+	public void showInfo(String message, String title)
 	{
-		this.currentType = type;
-		this.currentMessage = message;
-		this.currentTitle = title;
-		this.onYes = onYes;
-		this.onNo = onNo;
-		this.showDialog = true;
+		showDialog(ImGuiThreadBridge.DialogType.INFO, message, title, null, null);
+	}
+
+	public void showError(String message, String title, Runnable onClose)
+	{
+		showDialog(ImGuiThreadBridge.DialogType.ERROR, message, title, onClose, null);
+	}
+
+	public void showWarning(String message, String title)
+	{
+		showDialog(ImGuiThreadBridge.DialogType.WARNING, message, title, null, null);
+	}
+
+	public void showYesNo(String message, String title, Runnable onYes, Runnable onNo)
+	{
+		showDialog(ImGuiThreadBridge.DialogType.YES_NO, message, title, onYes, onNo);
 	}
 
 	private static class QueuedDialog

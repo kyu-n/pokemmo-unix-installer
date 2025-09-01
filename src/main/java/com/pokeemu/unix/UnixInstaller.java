@@ -46,6 +46,7 @@ public class UnixInstaller extends Application
 
 	private final AtomicBoolean isLaunching = new AtomicBoolean(false);
 	private final AtomicBoolean isUpdating = new AtomicBoolean(false);
+	private final AtomicBoolean disposed = new AtomicBoolean(false);
 
 	private ExecutorService backgroundExecutor;
 	private UpdaterService updaterService;
@@ -55,7 +56,7 @@ public class UnixInstaller extends Application
 	@Override
 	protected void configure(Configuration config)
 	{
-		config.setTitle("PokeMMO Unix Installer");
+		config.setTitle(Config.getString("main.title"));
 		config.setWidth(WINDOW_WIDTH);
 		config.setHeight(WINDOW_HEIGHT);
 	}
@@ -66,7 +67,6 @@ public class UnixInstaller extends Application
 		super.initImGui(config);
 
 		ImGui.getIO().addConfigFlags(ImGuiConfigFlags.NavEnableKeyboard);
-		ImGui.getIO().addConfigFlags(ImGuiConfigFlags.DockingEnable);
 		ImGui.getIO().setIniFilename(null);
 
 		LocalizationManager.instance.initializeFonts();
@@ -83,9 +83,9 @@ public class UnixInstaller extends Application
 			t.setName("UnixInstaller-Worker-" + t.hashCode());
 			return t;
 		});
-		updaterService = new UpdaterService(this, threadBridge);
 
-		Config.load();
+		updaterService = new UpdaterService(this, threadBridge);
+		MessageDialog.getInstance().setParent(this);
 
 		if(headlessException != null)
 		{
@@ -128,6 +128,11 @@ public class UnixInstaller extends Application
 	@Override
 	protected void dispose()
 	{
+		if(!disposed.compareAndSet(false, true))
+		{
+			return;
+		}
+
 		try
 		{
 			Config.save();
@@ -139,7 +144,15 @@ public class UnixInstaller extends Application
 
 		if(updaterService != null)
 		{
-			updaterService.shutdown();
+			try
+			{
+				updaterService.shutdown();
+			}
+			catch(Exception e)
+			{
+				System.err.println("Failed to shutdown updater service: " + e.getMessage());
+			}
+			updaterService = null;
 		}
 
 		if(backgroundExecutor != null)
@@ -161,14 +174,23 @@ public class UnixInstaller extends Application
 				backgroundExecutor.shutdownNow();
 				Thread.currentThread().interrupt();
 			}
+			backgroundExecutor = null;
 		}
 
 		if(threadBridge != null)
 		{
 			threadBridge.clearPendingUpdates();
+			threadBridge = null;
 		}
 
-		super.dispose();
+		try
+		{
+			super.dispose();
+		}
+		catch(Exception e)
+		{
+			System.err.println("Error in super.dispose(): " + e.getMessage());
+		}
 	}
 
 	private void initializeInstaller()
@@ -291,7 +313,7 @@ public class UnixInstaller extends Application
 
 		FeedManager.resetForRetry();
 
-		mainWindow.addTaskLine("Retrying connection to update servers...");
+		mainWindow.addTaskLine(Config.getString("status.retrying_connection"));
 
 		initializeInstaller();
 	}
@@ -386,6 +408,11 @@ public class UnixInstaller extends Application
 		return mainWindow;
 	}
 
+	public NetworkErrorDialog getNetworkErrorDialog()
+	{
+		return networkErrorDialog;
+	}
+
 	public UpdaterService getUpdaterService()
 	{
 		return updaterService;
@@ -407,6 +434,8 @@ public class UnixInstaller extends Application
 				break;
 			}
 		}
+
+		Config.load();
 
 		if(!FORCE_UI)
 		{

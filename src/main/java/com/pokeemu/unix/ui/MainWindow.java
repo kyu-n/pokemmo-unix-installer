@@ -102,15 +102,15 @@ public class MainWindow
 		String status = threadBridge.getStatusMessage();
 		if(status != null && !status.isEmpty())
 		{
-			ImGui.text("Status: " + status);
+			ImGui.text(Config.getString("main.status_label") + " " + status);
 		}
 		else
 		{
-			ImGui.text("Status: Ready");
+			ImGui.text(Config.getString("main.status_label") + " " + Config.getString("status.ready"));
 		}
 
 		float progress = threadBridge.getProgress() / 100.0f;
-		ImGui.text("Progress:");
+		ImGui.text(Config.getString("main.progress_label"));
 		ImGui.sameLine();
 
 		float availableWidth = ImGui.getContentRegionAvailX();
@@ -314,7 +314,6 @@ public class MainWindow
 
 		ImGui.endChild();
 	}
-
 	public void setCanStart(boolean canStart)
 	{
 		this.canStart.set(canStart);

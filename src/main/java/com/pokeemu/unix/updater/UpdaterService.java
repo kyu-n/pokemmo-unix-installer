@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -50,6 +52,9 @@ public class UpdaterService
 	private static final String TEMP_SUFFIX = ".tmp";
 
 	private final Thread shutdownHook;
+
+	private final AtomicBoolean cleanupPerformed = new AtomicBoolean(false);
+	private final AtomicBoolean shutdownHookRegistered = new AtomicBoolean(false);
 
 	static
 	{
@@ -145,32 +150,42 @@ public class UpdaterService
 		try
 		{
 			Runtime.getRuntime().addShutdownHook(shutdownHook);
+			shutdownHookRegistered.set(true);
 		}
 		catch(Exception e)
 		{
 			System.err.println("Failed to register shutdown hook: " + e.getMessage());
+			shutdownHookRegistered.set(false);
 		}
 	}
 
 	private void cleanupTempFiles()
 	{
-		for(Path tempFile : activeTempFiles)
+		if(!cleanupPerformed.compareAndSet(false, true))
 		{
+			return;
+		}
+
+		Iterator<Path> it = activeTempFiles.iterator();
+		while(it.hasNext())
+		{
+			Path tempFile = it.next();
 			try
 			{
-				Files.deleteIfExists(tempFile);
+				if(Files.exists(tempFile))
+				{
+					Files.deleteIfExists(tempFile);
+				}
 			}
 			catch(IOException e)
 			{
-				System.err.println("Failed to delete temp file: " + tempFile + " - " + e.getMessage());
+				System.err.println("Failed to delete temp file: " + tempFile);
 			}
+
+			it.remove();
 		}
-		activeTempFiles.clear();
 	}
 
-	/**
-	 * Create a predictable temp file path for downloads
-	 */
 	private Path createTempFile(Path targetPath) throws IOException
 	{
 		String targetHash = Integer.toHexString(targetPath.toString().hashCode() & 0x7FFFFFFF);
@@ -249,8 +264,86 @@ public class UpdaterService
 		parent.createSymlinkedDirectories();
 	}
 
+	private void clearCacheDirectory()
+	{
+		progressReporter.setStatus(Config.getString("status.delete_caches"), 20);
+
+		// Clear cache directory
+		File cacheDir = new File(LauncherUtils.getPokemmoDir() + "/cache");
+
+		if(cacheDir.exists() && cacheDir.isDirectory())
+		{
+			try
+			{
+				// Walk through cache directory and delete all files
+				try(var pathStream = Files.walk(cacheDir.toPath()))
+				{
+					// Sort in reverse order to delete files before directories
+					pathStream.sorted(Comparator.reverseOrder())
+							.filter(path -> !path.equals(cacheDir.toPath())) // Don't delete the cache dir itself
+							.forEach(path -> {
+								try
+								{
+									Files.delete(path);
+									if(!Files.isDirectory(path))
+									{
+										progressReporter.showInfo("status.delete_cache_file",
+												path.getFileName().toString());
+									}
+								}
+								catch(IOException e)
+								{
+									System.err.println("Failed to delete cache file: " + path + " - " + e.getMessage());
+								}
+							});
+				}
+			}
+			catch(IOException e)
+			{
+				System.err.println("Error clearing cache directory: " + e.getMessage());
+				e.printStackTrace();
+			}
+		}
+
+		// Clear *.properties files from config directory
+		File configDir = new File(LauncherUtils.getPokemmoDir() + "/config");
+
+		if(configDir.exists() && configDir.isDirectory())
+		{
+			try
+			{
+				try(var pathStream = Files.list(configDir.toPath()))
+				{
+					pathStream.filter(path -> {
+								String fileName = path.getFileName().toString();
+								return fileName.endsWith(".properties");
+							})
+							.forEach(path -> {
+								try
+								{
+									Files.delete(path);
+									progressReporter.showInfo("status.delete_cache_file",
+											"config/" + path.getFileName().toString());
+								}
+								catch(IOException e)
+								{
+									System.err.println("Failed to delete config file: " + path + " - " + e.getMessage());
+								}
+							});
+				}
+			}
+			catch(IOException e)
+			{
+				System.err.println("Error clearing config properties files: " + e.getMessage());
+				e.printStackTrace();
+			}
+		}
+	}
+
 	private void performRepair()
 	{
+		clearCacheDirectory();
+
 		progressReporter.setStatus(Config.getString("status.game_repair"), 30);
 
 		List<UpdateFile> toRepair = new ArrayList<>();
@@ -397,8 +490,6 @@ public class UpdaterService
 
 	private void finishUpdate()
 	{
-		cleanupTempFiles();
-
 		progressReporter.setStatus(Config.getString("status.game_verified"), 90);
 		progressReporter.setStatus(Config.getString("status.ready"), 100);
 		parent.setUpdating(false);
@@ -442,6 +533,71 @@ public class UpdaterService
 		else
 		{
 			return String.format("%.1f MB/s", bytesPerSecond / (1024 * 1024));
+		}
+	}
+
+	private final AtomicBoolean shutdownCalled = new AtomicBoolean(false);
+
+	public void shutdown()
+	{
+		if(!shutdownCalled.compareAndSet(false, true))
+		{
+			return;
+		}
+
+		isShuttingDown = true;
+
+		activeTasks.clear();
+
+		cleanupTempFiles();
+
+		if(shutdownHookRegistered.get())
+		{
+			try
+			{
+				Runtime.getRuntime().removeShutdownHook(shutdownHook);
+				shutdownHookRegistered.set(false);
+			}
+			catch(IllegalStateException e)
+			{
+				// Already shutting down, ignore
+			}
+			catch(Exception e)
+			{
+				System.err.println("Failed to remove shutdown hook: " + e.getMessage());
+			}
+		}
+
+		shutdownExecutor(speedCalculator, "Speed Calculator", 2);
+		shutdownExecutor(downloadExecutor, "Download Executor", 5);
+	}
+
+	private void shutdownExecutor(ExecutorService executor, String name, int timeoutSeconds)
+	{
+		if(executor == null || executor.isShutdown())
+		{
+			return;
+		}
+
+		executor.shutdown();
+		try
+		{
+			if(!executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS))
+			{
+				System.err.println(name + " didn't terminate gracefully, forcing shutdown");
+				executor.shutdownNow();
+
+				if(!executor.awaitTermination(2, TimeUnit.SECONDS))
+				{
+					System.err.println(name + " didn't terminate after forced shutdown");
+				}
+			}
+		}
+		catch(InterruptedException e)
+		{
+			System.err.println(name + " shutdown interrupted");
+			executor.shutdownNow();
+			Thread.currentThread().interrupt();
 		}
 	}
 
@@ -510,7 +666,6 @@ public class UpdaterService
 				try
 				{
 					tempFile = createTempFile(targetPath);
-
 					activeTempFiles.add(tempFile);
 
 					if(!downloadWithProgress(url, tempFile.toFile()))
@@ -582,58 +737,6 @@ public class UpdaterService
 			}
 
 			return success;
-		}
-	}
-
-	public void shutdown()
-	{
-		isShuttingDown = true;
-
-		activeTasks.clear();
-
-		cleanupTempFiles();
-
-		try
-		{
-			if(shutdownHook != null)
-			{
-				Runtime.getRuntime().removeShutdownHook(shutdownHook);
-			}
-		}
-		catch(Exception ignored)
-		{
-		}
-
-		shutdownExecutor(speedCalculator, "Speed Calculator", 2);
-		shutdownExecutor(downloadExecutor, "Download Executor", 5);
-	}
-
-	private void shutdownExecutor(ExecutorService executor, String name, int timeoutSeconds)
-	{
-		if(executor == null)
-		{
-			return;
-		}
-
-		executor.shutdown();
-		try
-		{
-			if(!executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS))
-			{
-				System.err.println(name + " didn't terminate gracefully, forcing shutdown");
-				executor.shutdownNow();
-
-				if(!executor.awaitTermination(2, TimeUnit.SECONDS))
-				{
-					System.err.println(name + " didn't terminate after forced shutdown");
-				}
-			}
-		}
-		catch(InterruptedException e)
-		{
-			System.err.println(name + " shutdown interrupted");
-			executor.shutdownNow();
-			Thread.currentThread().interrupt();
 		}
 	}
 }

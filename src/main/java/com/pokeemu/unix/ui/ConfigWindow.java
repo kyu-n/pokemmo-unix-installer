@@ -7,35 +7,18 @@ import com.pokeemu.unix.enums.UpdateChannel;
 import com.pokeemu.unix.util.Util;
 
 import imgui.ImGui;
-import imgui.ImVec2;
-import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImBoolean;
 
-/**
- * @author Kyu
- */
-public class ConfigWindow
+public class ConfigWindow extends AbstractModalWindow
 {
 	private final UnixInstaller parent;
 	private final ImGuiThreadBridge threadBridge;
-
-	private enum DialogState
-	{
-		CLOSED,
-		OPENING,
-		OPEN
-	}
-
-	private volatile DialogState dialogState = DialogState.CLOSED;
 
 	private final imgui.type.ImInt selectedLocaleIndex = new imgui.type.ImInt();
 	private final imgui.type.ImInt networkThreads = new imgui.type.ImInt();
 	private final imgui.type.ImInt selectedChannelIndex = new imgui.type.ImInt();
 	private final imgui.type.ImInt maxMemory = new imgui.type.ImInt();
 	private boolean aesWorkaround;
-
-	private final int windowWidth;
-	private final int windowHeight;
 
 	private static final float LABEL_WIDTH = 200.0f;
 	private static final float INPUT_WIDTH = 200.0f;
@@ -48,17 +31,16 @@ public class ConfigWindow
 	private final String[] localeNames;
 	private final String[] channelNames;
 
-	private static final String POPUP_ID = "##ConfigModal";
-
 	public ConfigWindow(UnixInstaller parent)
 	{
+		super("##ConfigModal", 363, 251);
+
 		this.parent = parent;
 		this.threadBridge = parent.getThreadBridge();
 
-		this.windowWidth = 363;
-		this.windowHeight = 251;
-
-		loadCurrentSettings();
+		this.isResizable = false;
+		this.hasTitleBar = false;
+		this.centerOnAppear = true;
 
 		localeNames = new String[PokeMMOLocale.ENABLED_LANGUAGES.length];
 		for(int i = 0; i < PokeMMOLocale.ENABLED_LANGUAGES.length; i++)
@@ -71,95 +53,47 @@ public class ConfigWindow
 		{
 			channelNames[i] = UpdateChannel.ENABLED_UPDATE_CHANNELS[i].name();
 		}
+
+		loadCurrentSettings();
 	}
 
-	private void loadCurrentSettings()
+	@Override
+	protected String getTitle()
 	{
-		selectedLocaleIndex.set(getLocaleIndex(Config.ACTIVE_LOCALE));
-		networkThreads.set(Config.NETWORK_THREADS);
-		selectedChannelIndex.set(getUpdateChannelIndex(Config.UPDATE_CHANNEL));
-
-		int memValue = Config.HARD_MAX_MEMORY_MB;
-		if(memValue < MEMORY_MIN)
-		{
-			memValue = MEMORY_DEFAULT;
-		}
-		else if(memValue > MEMORY_MAX)
-		{
-			memValue = MEMORY_MAX;
-		}
-		memValue = ((memValue + MEMORY_STEP / 2) / MEMORY_STEP) * MEMORY_STEP;
-		maxMemory.set(memValue);
-
-		aesWorkaround = Config.AES_INTRINSICS_WORKAROUND_ENABLED;
+		return Config.getString("config.title.window");
 	}
 
-	public void render()
+	@Override
+	protected void onShow()
 	{
-		switch(dialogState)
-		{
-			case CLOSED:
-				return;
+		loadCurrentSettings();
+	}
 
-			case OPENING:
-				ImGui.openPopup(POPUP_ID);
-				dialogState = DialogState.OPEN;
-				break;
-
-			case OPEN:
-				break;
-		}
-
-		ImGui.setNextWindowSize(windowWidth, windowHeight, imgui.flag.ImGuiCond.Always);
-
-		ImVec2 center = ImGui.getMainViewport().getCenter();
-		ImGui.setNextWindowPos(center.x, center.y, imgui.flag.ImGuiCond.Always, 0.5f, 0.5f);
-
-		if(!ImGui.beginPopupModal(POPUP_ID, null,
-				ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoResize |
-						ImGuiWindowFlags.NoTitleBar))
-		{
-			dialogState = DialogState.CLOSED;
-			return;
-		}
-
-		renderCustomTitleBar();
-		ImGui.separator();
-
+	@Override
+	protected void renderContent()
+	{
 		renderGeneralSettings();
 		ImGui.separator();
 		renderAdvancedSettings();
-		ImGui.separator();
+	}
+
+	@Override
+	protected boolean hasFooter()
+	{
+		return true;
+	}
+
+	@Override
+	protected void renderFooter()
+	{
 		renderActions();
-
-		ImGui.endPopup();
-	}
-
-	/**
-	 * Render a custom title bar that updates with language changes
-	 */
-	private void renderCustomTitleBar()
-	{
-		String titleText = Config.getString("config.title.window");
-		float titleWidth = ImGui.calcTextSize(titleText).x;
-		float windowWidth = ImGui.getWindowWidth();
-		float centerX = (windowWidth - titleWidth) * 0.5f;
-
-		ImGui.setCursorPosX(centerX);
-		ImGui.text(titleText);
-	}
-
-	private void closeWindow()
-	{
-		dialogState = DialogState.CLOSED;
-		ImGui.closeCurrentPopup();
 	}
 
 	private void renderGeneralSettings()
 	{
 		ImGui.pushItemWidth(INPUT_WIDTH);
 
-		renderLabeledWidget("config.title.language", () -> {
+		renderLabeledControl(Config.getString("config.title.language"), LABEL_WIDTH, () -> {
 			boolean enabled = PokeMMOLocale.ENABLED_LANGUAGES.length > 1;
 			if(!enabled)
 			{
@@ -182,7 +116,7 @@ public class ConfigWindow
 			}
 		});
 
-		renderLabeledWidget("config.title.dl_threads", () -> {
+		renderLabeledControl(Config.getString("config.title.dl_threads"), LABEL_WIDTH, () -> {
 			int[] threadArray = {networkThreads.get()};
 			if(ImGui.sliderInt("##NetworkThreads", threadArray, 1, Config.NETWORK_THREADS_MAX))
 			{
@@ -192,7 +126,7 @@ public class ConfigWindow
 			}
 		});
 
-		renderLabeledWidget("config.title.update_channel", () -> {
+		renderLabeledControl(Config.getString("config.title.update_channel"), LABEL_WIDTH, () -> {
 			boolean enabled = UpdateChannel.ENABLED_UPDATE_CHANNELS.length > 1;
 			if(!enabled)
 			{
@@ -223,10 +157,9 @@ public class ConfigWindow
 		if(ImGui.collapsingHeader(Config.getString("config.title.advanced")))
 		{
 			ImGui.indent();
-
 			ImGui.pushItemWidth(INPUT_WIDTH);
 
-			renderLabeledWidget("config.mem.max", () -> {
+			renderLabeledControl(Config.getString("config.mem.max"), LABEL_WIDTH, () -> {
 				if(ImGui.inputInt("##MaxMemory", maxMemory, MEMORY_STEP, MEMORY_STEP * 2))
 				{
 					int value = maxMemory.get();
@@ -241,7 +174,7 @@ public class ConfigWindow
 				ImGui.text("MB");
 			});
 
-			renderLabeledWidget("config.title.networking_corruption_workaround", () -> {
+			renderLabeledControl(Config.getString("config.title.networking_corruption_workaround"), LABEL_WIDTH, () -> {
 				ImGui.beginDisabled();
 
 				ImBoolean aesValue = new ImBoolean(aesWorkaround);
@@ -291,23 +224,21 @@ public class ConfigWindow
 		float buttonWidth = 100.0f;
 		ImGui.setCursorPosX(ImGui.getWindowWidth() - buttonWidth - ImGui.getStyle().getWindowPaddingX());
 
-		if(ImGui.button("Close", buttonWidth, 0))
+		if(ImGui.button(Config.getString("button.close"), buttonWidth, 0))
 		{
-			closeWindow();
+			close();
 		}
 
 		if(ImGui.button(Config.getString("config.title.repair_client")))
 		{
-			closeWindow();
+			close();
 
 			threadBridge.asyncExec(() -> threadBridge.showYesNoDialog(
 					Config.getString("status.game_repair_prompt"),
-					"Confirm Repair",
+					Config.getString("dialog.title.confirm_repair"),
 					() -> {
 						parent.getMainWindow().clearTaskOutput();
-
-						parent.getMainWindow().addTaskLine("Starting client repair...");
-
+						parent.getMainWindow().addTaskLine(Config.getString("status.starting_repair"));
 						parent.getUpdaterService().startUpdate(true, false);
 					},
 					null
@@ -317,20 +248,9 @@ public class ConfigWindow
 		if(isUpdating)
 		{
 			ImGui.endDisabled();
-
 			ImGui.sameLine();
-			ImGui.textColored(1.0f, 0.8f, 0.0f, 1.0f, "Updating...");
+			ImGui.textColored(1.0f, 0.8f, 0.0f, 1.0f, Config.getString("status.updating"));
 		}
-	}
-
-	/**
-	 * Helper method to render a labeled widget with consistent spacing
-	 */
-	private void renderLabeledWidget(String labelKey, Runnable widgetRenderer)
-	{
-		ImGui.text(Config.getString(labelKey));
-		ImGui.sameLine(LABEL_WIDTH);
-		widgetRenderer.run();
 	}
 
 	private void renderHelpMarker(String tooltipKey)
@@ -344,6 +264,27 @@ public class ConfigWindow
 			ImGui.popTextWrapPos();
 			ImGui.endTooltip();
 		}
+	}
+
+	private void loadCurrentSettings()
+	{
+		selectedLocaleIndex.set(getLocaleIndex(Config.ACTIVE_LOCALE));
+		networkThreads.set(Config.NETWORK_THREADS);
+		selectedChannelIndex.set(getUpdateChannelIndex(Config.UPDATE_CHANNEL));
+
+		int memValue = Config.HARD_MAX_MEMORY_MB;
+		if(memValue < MEMORY_MIN)
+		{
+			memValue = MEMORY_DEFAULT;
+		}
+		else if(memValue > MEMORY_MAX)
+		{
+			memValue = MEMORY_MAX;
+		}
+		memValue = ((memValue + MEMORY_STEP / 2) / MEMORY_STEP) * MEMORY_STEP;
+		maxMemory.set(memValue);
+
+		aesWorkaround = Config.AES_INTRINSICS_WORKAROUND_ENABLED;
 	}
 
 	private int getLocaleIndex(PokeMMOLocale locale)
@@ -368,23 +309,5 @@ public class ConfigWindow
 			}
 		}
 		return 0;
-	}
-
-	public void setVisible(boolean visible)
-	{
-		if(visible)
-		{
-			loadCurrentSettings();
-			dialogState = DialogState.OPENING;
-		}
-		else
-		{
-			dialogState = DialogState.CLOSED;
-		}
-	}
-
-	public boolean isVisible()
-	{
-		return dialogState != DialogState.CLOSED;
 	}
 }

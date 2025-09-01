@@ -29,7 +29,6 @@ public class LocalizationManager
 	public static final LocalizationManager instance = INSTANCE;
 
 	private volatile PokeMMOLocale currentLocale;
-
 	private final Map<String, String> stringCache = new HashMap<>();
 
 	private static final float DEFAULT_FONT_SIZE = 16.0f;
@@ -50,35 +49,26 @@ public class LocalizationManager
 		fontAtlas.clear();
 
 		ImFontConfig fontConfig = new ImFontConfig();
-		try
+
+		fontConfig.setSizePixels(DEFAULT_FONT_SIZE);
+		fontConfig.setOversampleH(3);
+		fontConfig.setOversampleV(1);
+		fontConfig.setPixelSnapH(true);
+
+		short[] glyphRanges = getOptimizedGlyphRanges();
+
+		ImFont mainFont = loadFontFromResource(fontAtlas, fontConfig, glyphRanges);
+
+		if(mainFont == null)
 		{
-			fontConfig.setSizePixels(DEFAULT_FONT_SIZE);
-			fontConfig.setOversampleH(3);
-			fontConfig.setOversampleV(1);
-			fontConfig.setPixelSnapH(true);
-
-			short[] glyphRanges = getOptimizedGlyphRanges();
-
-			ImFont mainFont = loadFontFromResource(fontAtlas, fontConfig, glyphRanges);
-
-			if(mainFont == null)
-			{
-				System.err.println("Failed to load any fonts from resources, using ImGui default");
-				mainFont = fontAtlas.addFontDefault();
-			}
-
-			fontAtlas.build();
-			io.setFontDefault(mainFont);
+			System.err.println("Failed to load any fonts from resources, using ImGui default");
+			mainFont = fontAtlas.addFontDefault();
 		}
-		finally
-		{
-			fontConfig.destroy();
-		}
+
+		fontAtlas.build();
+		io.setFontDefault(mainFont);
 	}
 
-	/**
-	 * Generate optimized glyph ranges based on actual characters used in all resource bundles
-	 */
 	private short[] getOptimizedGlyphRanges()
 	{
 		if(cachedGlyphRanges != null)
@@ -89,7 +79,6 @@ public class LocalizationManager
 		UnicodeSet allChars = new UnicodeSet();
 
 		allChars.add(0x0020, 0x007E);
-
 		allChars.add(0x00A0, 0x00FF);
 		allChars.add(0x2000, 0x206F);
 		allChars.add(0x20A0, 0x20CF);
@@ -135,15 +124,11 @@ public class LocalizationManager
 		}
 
 		cachedGlyphRanges = convertUnicodeSetToRanges(allChars);
-
 		System.out.println("Generated font ranges covering " + allChars.size() + " unique characters");
 
 		return cachedGlyphRanges;
 	}
 
-	/**
-	 * Convert ICU4J UnicodeSet to ImGui glyph ranges format
-	 */
 	private short[] convertUnicodeSetToRanges(UnicodeSet unicodeSet)
 	{
 		List<Short> ranges = new ArrayList<>();
@@ -294,5 +279,4 @@ public class LocalizationManager
 			return template;
 		}
 	}
-
 }

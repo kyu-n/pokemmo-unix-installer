@@ -2,9 +2,6 @@ package com.pokeemu.unix.enums;
 
 import java.util.stream.Stream;
 
-/**
- * @author Kyu
- */
 public enum UpdateChannel
 {
 	live(true),

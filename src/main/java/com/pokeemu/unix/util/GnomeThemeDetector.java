@@ -1,7 +1,6 @@
 package com.pokeemu.unix.util;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.regex.Pattern;
 
@@ -38,7 +37,7 @@ public class GnomeThemeDetector
 				}
 			}
 		}
-		catch(IOException e)
+		catch(Exception e)
 		{
 			System.out.println("Couldn't detect GNOME theme");
 			e.printStackTrace();

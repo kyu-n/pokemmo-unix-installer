@@ -1,18 +1,17 @@
+plugins {
+    id 'java-library'
+    id 'eclipse'
+    id 'idea'
+}
+
 repositories {
     mavenCentral()
     google()
 }
 
-apply plugin: "java-library"
-apply plugin: "eclipse"
-apply plugin: "idea"
-
 dependencies {
-    implementation files('libs/flatlaf-3.5.2.jar')
-}
-
-compileJava {
-    options.release = 21
+    implementation "io.github.spair:imgui-java-app:1.90.0"
+    implementation 'com.ibm.icu:icu4j:77.1'
 }
 
 java {
@@ -21,18 +20,21 @@ java {
     }
 }
 
+compileJava {
+    options.release = 21
+}
+
 project.ext.appName = "PokeMMO"
 project.ext.mainClassName = "com.pokeemu.unix.UnixInstaller"
 project.ext.mainJar = "unix-installer.jar"
 
-// creates a slim JDK runtime for distribution
-task createRuntime(type: Exec) {
-    doFirst() {
-        project.delete("${buildDir}/runtime")
+tasks.register('createRuntime', Exec) {
+    doFirst {
+        project.delete(layout.buildDirectory.dir("runtime"))
     }
 
-    String runtimePath = "${buildDir}/runtime"
-    String jlinkPath = "$System.env.JRE_TARGET" + "/bin/jlink"
+    String runtimePath = layout.buildDirectory.dir("runtime").get().asFile.absolutePath
+    String jlinkPath = "$System.env.JRE_TARGET/bin/jlink"
 
     workingDir project.projectDir
     commandLine = [
@@ -41,30 +43,42 @@ task createRuntime(type: Exec) {
             '--strip-debug',
             '--no-header-files',
             '--no-man-pages',
-            "--vm=server",
-            "--compress=2",
+            '--vm=server',
+            '--compress=2',
             '--output', runtimePath
     ]
 }
 
 jar {
     archiveFileName = project.mainJar
-
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     manifest {
         attributes(
-                'Main-Class': project.mainClassName
+                'Main-Class': project.mainClassName,
+                'Multi-Release': 'true'
         )
     }
+
     from {
         configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
     }
+
+    exclude '**/natives-windows/**'
+    exclude '**/natives-macos/**'
+    exclude '**/natives-freebsd/**'
+    exclude '**/*.dll'
+    exclude '**/*.dylib'
+    exclude '**/windows*/**'
+    exclude '**/macos*/**'
+    exclude '**/darwin*/**'
 }
-task dist(type: GradleBuild) {
-    buildName "dist"
-    startParameter.projectProperties = gradle.startParameter.projectProperties
-    tasks = ['clean', 'createRuntime', 'jar']
+
+tasks.register('dist') {
+    dependsOn 'clean', 'createRuntime', 'jar'
+
+    group = 'distribution'
+    description = 'Creates a complete distribution with runtime and jar'
 }
 
 assemble.dependsOn dist

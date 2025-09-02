@@ -1,719 +1,584 @@
 package com.pokeemu.unix;
 
-import java.awt.*;
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.net.http.HttpClient;
 import java.nio.file.Files;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
+import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Phaser;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatLightLaf;
 import com.pokeemu.unix.config.Config;
-import com.pokeemu.unix.ui.MainFrame;
+import com.pokeemu.unix.ui.ConfigWindow;
+import com.pokeemu.unix.ui.ErrorDialog;
+import com.pokeemu.unix.ui.ImGuiStyleManager;
+import com.pokeemu.unix.ui.ImGuiThreadBridge;
+import com.pokeemu.unix.ui.LocalizationManager;
+import com.pokeemu.unix.ui.MainWindow;
+import com.pokeemu.unix.ui.MessageDialog;
 import com.pokeemu.unix.updater.FeedManager;
-import com.pokeemu.unix.updater.UpdateFile;
-import com.pokeemu.unix.updater.UpdaterSwingWorker;
+import com.pokeemu.unix.updater.UpdaterService;
+
 import com.pokeemu.unix.util.GnomeThemeDetector;
-import com.pokeemu.unix.util.Util;
 
-import javax.swing.*;
+import imgui.ImGui;
+import imgui.app.Application;
+import imgui.app.Configuration;
+import imgui.flag.ImGuiConfigFlags;
 
-/**
- * PokeMMO Unix Installer
- * <p>
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- * <p>
- * This program is distributed WITHOUT ANY WARRANTY; without even the implied
- * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * <p>
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- * <p>
- * This program is created as a pairing to the PokeMMO Game Client. PokeMMO's
- * Game Client software is provided with the PokeMMO License. To view this license, visit
- * https://pokemmo.com/tos/
- * <p>
- * This program manages:
- * - Downloads of the PokeMMO game client
- * - Signature verification for the downloaded files
- * - Cache management / storage of the program
- * - Execution of the program
- *
- * @author Kyu <kyu@pokemmo.com>
- * @author Desu <desu@pokemmo.com>
- */
-public class UnixInstaller
+import org.lwjgl.glfw.GLFW;
+
+public class UnixInstaller extends Application
 {
-	public static final int INSTALLER_VERSION = 21;
+	public static final int INSTALLER_VERSION = 30;
 
 	public static final int EXIT_CODE_SUCCESS = 0;
 	public static final int EXIT_CODE_NETWORK_FAILURE = 1;
 	public static final int EXIT_CODE_IO_FAILURE = 2;
-	public static final int EXIT_CODE_UNK_FAILURE = -127;
 
-	/**
-	 * Whether to silently start the game client (without bringing this UI to the front)
-	 */
 	public static boolean QUICK_AUTOSTART = true;
+	public static boolean FORCE_UI = false;
 
-	private MainFrame mainFrame;
+	private static final int WINDOW_WIDTH = 540;
+	private static final int WINDOW_HEIGHT = 300;
 
-	/**
-	 * The default location of PokeMMO.exe and other files
-	 */
-	private String pokemmoDir;
-	private String jrePath;
+	private MainWindow mainWindow;
+	private ConfigWindow configWindow;
+	private ImGuiThreadBridge threadBridge;
+	private ErrorDialog errorDialog;
 
-	/**
-	 * The list of mirrors which have returned invalid results and must be skipped
-	 */
-	private final Set<Integer> disabledMirrors = new HashSet<>();
-	/**
-	 * If our PokeMMO client folder was missing
-	 */
-	private boolean firstRun = false;
+	private final AtomicBoolean isLaunching = new AtomicBoolean(false);
+	private final AtomicBoolean isUpdating = new AtomicBoolean(false);
 
-	private boolean isLaunching = false;
-	private boolean isUpdating = false;
+	private final AtomicBoolean disposed = new AtomicBoolean(false);
 
-	StringWriter stackTraceStringWriter = new StringWriter();
-	PrintWriter stackTracePrintWriter = new PrintWriter(stackTraceStringWriter);
+	private ExecutorService backgroundExecutor;
+	private UpdaterService updaterService;
 
-	public static final HttpClient httpClient;
-	public static final String snapcraft, flatpak, httpClientUserAgent;
+	private static Throwable headlessException = null;
 
-	static
+	@Override
+	protected void configure(Configuration config)
 	{
-		httpClient  = HttpClient.newBuilder()
-				.followRedirects(HttpClient.Redirect.NORMAL)
-				.connectTimeout(Duration.ofSeconds(20))
-				.build();
+		config.setTitle(Config.getString("main.title"));
+		config.setWidth(WINDOW_WIDTH);
+		config.setHeight(WINDOW_HEIGHT);
+	}
 
-		snapcraft = System.getenv("POKEMMO_IS_SNAPPED");
-		flatpak = System.getenv("POKEMMO_IS_FLATPAKED");
+	@Override
+	protected void initImGui(Configuration config)
+	{
+		super.initImGui(config);
 
-		if(snapcraft != null)
+		ImGui.getIO().addConfigFlags(ImGuiConfigFlags.NavEnableKeyboard);
+		ImGui.getIO().setIniFilename(null);
+
+		LocalizationManager.instance.initializeFonts();
+		ImGuiStyleManager.applySystemTheme();
+
+		threadBridge = new ImGuiThreadBridge();
+		mainWindow = new MainWindow(this, threadBridge, WINDOW_WIDTH, WINDOW_HEIGHT);
+		configWindow = new ConfigWindow(this);
+		errorDialog = new ErrorDialog(this);
+
+		backgroundExecutor = Executors.newCachedThreadPool(r -> {
+			Thread t = new Thread(r);
+			t.setDaemon(true);
+			t.setName("UnixInstaller-Worker-" + t.hashCode());
+			return t;
+		});
+
+		updaterService = new UpdaterService(this, threadBridge);
+
+		MessageDialog.getInstance().setParent(this);
+
+		if(headlessException != null)
 		{
-			httpClientUserAgent = "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION+") (Snapcraft)";
-		}
-		else if (flatpak != null)
-		{
-			httpClientUserAgent = "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION+") (Flatpak)";
+			QUICK_AUTOSTART = false;
+
+			threadBridge.asyncExec(() -> {
+				errorDialog.show(headlessException);
+				mainWindow.addTaskLine("ERROR: " + headlessException.getMessage());
+			});
 		}
 		else
 		{
-			httpClientUserAgent = "Mozilla/5.0 (PokeMMO; UnixInstaller v"+ UnixInstaller.INSTALLER_VERSION+")";
+			initializeInstaller();
 		}
 	}
 
-	private void run()
+	@Override
+	public void process()
 	{
-		String fileSeparator = File.separator;
+		threadBridge.processUpdates();
 
-		String user_home = System.getProperty("user.home");
-		String pokemmo_data_home = System.getenv("SNAP_USER_COMMON");
-		if(pokemmo_data_home == null)
+		mainWindow.render();
+
+		if(configWindow.isVisible())
 		{
-			pokemmo_data_home = Objects.requireNonNullElse(System.getenv("XDG_DATA_HOME"), user_home + fileSeparator + ".local" + fileSeparator + "share");
+			configWindow.render();
 		}
 
-		pokemmoDir = pokemmo_data_home + fileSeparator + "pokemmo-client-" + Config.UPDATE_CHANNEL.toString() + fileSeparator;
+		errorDialog.render();
 
-		jrePath = System.getProperty("java.home") + fileSeparator + "bin" + fileSeparator + "java";
-		mainFrame = new MainFrame(this);
+		MessageDialog.getInstance().render();
 
-		String version = System.getProperty("java.specification.version");
+		if(QUICK_AUTOSTART && mainWindow.isCanStart() && !isLaunching.get() &&
+				!isUpdating.get() && !errorDialog.isVisible())
+		{
+			launchGame();
+		}
+	}
 
-		int majorver;
+	@Override
+	protected void dispose()
+	{
+		if(!disposed.compareAndSet(false, true))
+		{
+			return;
+		}
+
+		// Request shutdown of async feed operations
+		FeedManager.requestShutdown();
+
 		try
 		{
-			majorver = Integer.parseInt(version);
+			Config.save();
 		}
-		catch(NumberFormatException e)
+		catch(Exception e)
+		{
+			System.err.println("Failed to save configuration: " + e.getMessage());
+		}
+
+		if(updaterService != null)
 		{
 			try
 			{
-				majorver = Integer.parseInt(version.split("\\.")[1]);
+				updaterService.shutdown();
 			}
-			catch(Exception e2)
+			catch(Exception e)
 			{
-				majorver = -1;
+				System.err.println("Failed to shutdown updater service: " + e.getMessage());
 			}
+			updaterService = null;
 		}
 
-		if(majorver < 21)
+		if(backgroundExecutor != null)
 		{
-			mainFrame.showError(Config.getString("error.incompatible_jvm", Config.getString("status.title.failed_startup")), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-			return;
-		}
-
-		checkForRunning();
-		downloadFeeds();
-
-		File pokemmo_directory = new File(pokemmoDir);
-		if(!pokemmo_directory.exists())
-		{
-			createPokemmoDir();
-			firstRun = true;
-		}
-
-		if(!pokemmo_directory.isDirectory())
-		{
-			mainFrame.showError(Config.getString("error.dir_not_dir", pokemmoDir, "DIR_5"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-			return;
-		}
-
-		if(!pokemmo_directory.setReadable(true) || !pokemmo_directory.setWritable(true) || !pokemmo_directory.setExecutable(true))
-		{
-			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_2"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-			return;
-		}
-
-		if(firstRun)
-		{
-			if(QUICK_AUTOSTART)
-			{
-				displayMainFrame();
-			}
-
-			createSymlinkedDirectories();
-			new UpdaterSwingWorker(this, mainFrame, false, false).execute();
-		}
-		else if(!isPokemmoValid())
-		{
-			if(QUICK_AUTOSTART)
-			{
-				displayMainFrame();
-			}
-
-			File revision_file = new File(pokemmoDir + "/revision.txt");
-			int revision = -1;
-			if(revision_file.exists() && revision_file.isFile())
-			{
-				try
-				{
-					revision = Integer.parseInt(new String(Files.readAllBytes(revision_file.toPath())));
-				}
-				catch(IOException | NumberFormatException e)
-				{
-					// Don't care
-				}
-			}
-
-			// If our declared revision is invalid, repair
-			new UpdaterSwingWorker(this, mainFrame, (revision <= 0 || (FeedManager.MIN_REVISION > 0 && revision >= FeedManager.MIN_REVISION)), false).execute();
-		}
-		else
-		{
-			mainFrame.showInfo("status.check_success");
-			mainFrame.setStatus("status.ready", 100);
-			mainFrame.setCanStart();
-		}
-	}
-
-	private void displayMainFrame()
-	{
-		QUICK_AUTOSTART = false;
-		mainFrame.setVisible(true);
-	}
-
-	public void launchGame()
-	{
-		if(isLaunching || isUpdating)
-			return;
-
-		isLaunching = true;
-		try
-		{
-			start();
-		}
-		catch(InterruptedException e)
-		{
-			System.exit(UnixInstaller.EXIT_CODE_UNK_FAILURE);
-		}
-	}
-
-	private void start() throws InterruptedException
-	{
-		List<String> final_args = new ArrayList<>();
-
-		final_args.add(jrePath);
-		final_args.add("-XX:+IgnoreUnrecognizedVMOptions");
-
-		final_args.add("-XX:+UseZGC");
-		final_args.add("-XX:+ZGenerational");
-		final_args.add("-Xms192M");
-		final_args.add("-Xmx" + Config.HARD_MAX_MEMORY_MB + "M");
-		final_args.add("-XX:+UnlockDiagnosticVMOptions");
-		final_args.add("-XX:-UseAESCTRIntrinsics");
-		final_args.add("-XX:-UseAESIntrinsics");
-		final_args.add("-Dfile.encoding=UTF-8");
-
-		/*
-		 * The default parameters used for launching the PokeMMO Client
-		 */
-		final_args.addAll(Arrays.asList("-cp", "PokeMMO.exe", "com.pokeemu.client.Client"));
-
-		ProcessBuilder pb = new ProcessBuilder(final_args);
-		pb.directory(new File(pokemmoDir));
-		pb.inheritIO();
-
-		// Used by KDE to xdg-portal file dialogues
-		pb.environment().put("GTK_USE_PORTALS", "1");
-		pb.environment().put("POKEMMO_UNIX_LAUNCHER_VER", Integer.toString(INSTALLER_VERSION));
-
-		if(snapcraft != null)
-		{
-			pb.environment().put("POKEMMO_IS_SNAPPED", snapcraft);
-		}
-		else if(flatpak != null)
-		{
-			pb.environment().put("POKEMMO_IS_FLATPAKED", flatpak);
-		}
-
-		System.out.println("Starting with params " + Arrays.toString(final_args.toArray(new String[0])));
-
-		try
-		{
-			pb.start();
-		}
-		catch(IOException e)
-		{
-			mainFrame.showErrorWithStacktrace(Config.getString("status.failed_startup"), Config.getString("status.title.failed_startup"), getStacktraceString(e), () -> System.exit(EXIT_CODE_IO_FAILURE));
-			return;
-		}
-
-		System.exit(0);
-	}
-
-	private void checkForRunning()
-	{
-		/*
-		 * It's safe to assume that only one process may use this processes's JRE, and it should be sufficient to query if any other processes are running from the current directory
-		 * This is not usable on Windows due to the potential for shared JREs/JDKs, but the approach works on macOS due to the app format and Linux due to Snapcraft / Flatpak isolation
-		 */
-		ProcessHandle processHandle = ProcessHandle.current();
-		ProcessHandle.Info processInfo = processHandle.info();
-
-		System.out.println("Started launcher at " + System.getProperty("user.dir"));
-
-		if(processInfo.command().isEmpty())
-		{
-			// Something really bad happened. Our j11 process API doesn't work. Bail out to prevent other issues.
-			mainFrame.showErrorWithStacktrace(Config.getString("status.failed_startup"), Config.getString("status.title.failed_startup"), "JPROC_FAIL", () -> System.exit(EXIT_CODE_IO_FAILURE));
-			return;
-		}
-
-		String launcherPath = processInfo.command().get();
-
-		List<ProcessHandle> destroyables = new ArrayList<>();
-		ProcessHandle.allProcesses().filter(ProcessHandle::isAlive).forEach(f ->
-		{
+			backgroundExecutor.shutdown();
 			try
 			{
-				if(f.info().command().isPresent() && f.pid() != processHandle.pid() && f.info().user().isPresent() && f.info().user().equals(processInfo.user()))
+				if(!backgroundExecutor.awaitTermination(5, TimeUnit.SECONDS))
 				{
-					String path = f.info().command().get();
-					if(path.equals(launcherPath) || path.equals(jrePath))
+					backgroundExecutor.shutdownNow();
+					if(!backgroundExecutor.awaitTermination(2, TimeUnit.SECONDS))
 					{
-						destroyables.add(f);
+						System.err.println("Background executor did not terminate");
 					}
+				}
+			}
+			catch(InterruptedException e)
+			{
+				backgroundExecutor.shutdownNow();
+				Thread.currentThread().interrupt();
+			}
+			backgroundExecutor = null;
+		}
+
+		if(threadBridge != null)
+		{
+			threadBridge.clearPendingUpdates();
+			threadBridge = null;
+		}
+
+		try
+		{
+			super.dispose();
+		}
+		catch(Exception e)
+		{
+			System.err.println("Error in super.dispose(): " + e.getMessage());
+		}
+	}
+
+	private void initializeInstaller()
+	{
+		backgroundExecutor.submit(() -> {
+			try
+			{
+				LauncherUtils.setupDirectories();
+
+				if(Config.hasConfigurationErrors())
+				{
+					String errors = Config.getConfigurationErrors();
+					threadBridge.asyncExec(() -> {
+						mainWindow.addTaskLine("WARNING: Configuration file had errors, using defaults:");
+						for(String line : errors.split("\n"))
+						{
+							if(!line.trim().isEmpty())
+							{
+								mainWindow.addTaskLine("  - " + line);
+							}
+						}
+						mainWindow.addTaskLine("You can fix these in Settings or by editing pokemmo-installer.properties");
+					});
+				}
+
+				if(!LauncherUtils.checkJavaVersion())
+				{
+					threadBridge.showError(
+							Config.getString("error.incompatible_jvm"),
+							Config.getString("status.title.failed_startup"),
+							() -> System.exit(EXIT_CODE_IO_FAILURE)
+					);
+					return;
+				}
+
+				if(LauncherUtils.isGameRunning())
+				{
+					System.out.println("Lock file exists, game may be running");
+				}
+
+				downloadFeeds();
+
+				if(!FeedManager.isSuccessful())
+				{
+					return;
+				}
+
+				File pokemmoDirectory = new File(LauncherUtils.getPokemmoDir());
+				if(!pokemmoDirectory.exists())
+				{
+					createPokemmoDir();
+					createSymlinkedDirectories();
+					updaterService.startUpdate(false, false);
+				}
+				else if(!pokemmoDirectory.isDirectory())
+				{
+					threadBridge.showError(
+							Config.getString("error.dir_not_dir", LauncherUtils.getPokemmoDir(), "DIR_5"),
+							Config.getString("status.title.io_failure"),
+							() -> System.exit(EXIT_CODE_IO_FAILURE)
+					);
+				}
+				else if(!LauncherUtils.isPokemmoValid())
+				{
+					File revisionFile = new File(LauncherUtils.getPokemmoDir() + "/revision.txt");
+					int revision = -1;
+					if(revisionFile.exists() && revisionFile.isFile())
+					{
+						try
+						{
+							revision = Integer.parseInt(new String(Files.readAllBytes(revisionFile.toPath())).trim());
+						}
+						catch(IOException | NumberFormatException e)
+						{
+						}
+					}
+
+					boolean repair = (revision <= 0 || (FeedManager.getMinRevision() > 0 && revision >= FeedManager.getMinRevision()));
+					updaterService.startUpdate(repair, false);
+				}
+				else
+				{
+					threadBridge.addDetail(Config.getString("status.check_success"), 90);
+					threadBridge.setStatus(Config.getString("status.ready"), 100);
+					mainWindow.setCanStart(true);
 				}
 			}
 			catch(Exception e)
 			{
-				// Skip!
+				e.printStackTrace();
+				threadBridge.asyncExec(() -> errorDialog.show(e));
 			}
 		});
-
-		if(!destroyables.isEmpty())
-		{
-			if(mainFrame.showYesNoDialogue(Config.getString("status.game_already_running"), ""))
-			{
-				for(ProcessHandle p : destroyables)
-				{
-					p.destroyForcibly();
-				}
-			}
-			else
-			{
-				System.exit(EXIT_CODE_SUCCESS);
-			}
-		}
-	}
-
-	private boolean isPokemmoValid()
-	{
-		if(System.getenv("POKEMMO_NOVERIFY") != null)
-		{
-			return true;
-		}
-
-		/*
-		 * The list of files which MUST be updated before continuing to launch
-		 */
-		Set<UpdateFile> invalidFiles = new HashSet<>();
-
-		mainFrame.setStatus("status.game_verification", 20);
-
-		for(UpdateFile file : FeedManager.getFiles())
-		{
-			if(file.only_if_not_exists)
-			{
-				continue;
-			}
-
-			File f = getFile(file.name);
-
-			if(!f.exists())
-			{
-				invalidFiles.add(file);
-				continue;
-			}
-
-			if(!file.shouldDownload())
-			{
-				continue;
-			}
-
-			String checksum_sha256 = file.sha256;
-			String actual_sha256 = Util.calculateHash("SHA-256", f);
-
-			if(!checksum_sha256.equalsIgnoreCase(actual_sha256))
-			{
-				invalidFiles.add(file);
-			}
-		}
-
-		return invalidFiles.isEmpty();
-	}
-
-	public void doUpdate(boolean repair)
-	{
-		if(isUpdating)
-			return;
-
-		isUpdating = true;
-
-		if(repair)
-		{
-			mainFrame.setStatus("status.game_repair", 30);
-		}
-		else
-		{
-			mainFrame.addDetail("status.title.update_available", 30);
-			mainFrame.setStatus("status.game_download", 30);
-		}
-
-		ExecutorService networkExecutorService = Executors.newFixedThreadPool(Config.NETWORK_THREADS);
-
-		int total_files = FeedManager.getFiles().size();
-		if(total_files < 1)
-		{
-			total_files = 1;
-		}
-
-		int counter = 0;
-
-		List<UpdateFile> to_download = new ArrayList<>();
-
-		for(UpdateFile file : FeedManager.getFiles())
-		{
-			if(!file.shouldDownload())
-			{
-				continue;
-			}
-
-			String checksum_sha256 = file.sha256;
-
-			File f = getFile(file.name);
-
-			if(file.only_if_not_exists && f.exists())
-			{
-				continue;
-			}
-
-			if(!f.getParentFile().mkdirs() && !f.getParentFile().exists())
-			{
-				mainFrame.showError(Config.getString("error.dir_not_accessible", f.getParentFile(), "DIR_8"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
-				return;
-			}
-
-			String hash_sha256 = Util.calculateHash("SHA-256", f);
-
-			if(!checksum_sha256.equalsIgnoreCase(hash_sha256))
-			{
-				if(repair)
-				{
-					mainFrame.addDetail("status.files.repairing", ((counter * 100) / total_files), file.name);
-					System.out.println("Checksum mismatch for " + file.name);
-					System.out.println("Wanted SHA256: " + checksum_sha256 + " | Actual: " + hash_sha256);
-				}
-
-				to_download.add(file);
-			}
-
-			counter++;
-		}
-
-		if(to_download.isEmpty())
-		{
-			mainFrame.setStatus("status.game_verified", 90);
-			mainFrame.setStatus("status.ready", 100);
-			isUpdating = false;
-			return;
-		}
-
-		mainFrame.setStatus("status.downloading", 0);
-
-		Phaser phaser = new Phaser(to_download.size() + 1);
-
-		for(UpdateFile file : to_download)
-		{
-			networkExecutorService.submit(() ->
-			{
-				mainFrame.addDetail("status.files.downloading", ((phaser.getArrivedParties() * 100) / to_download.size()), file.name);
-
-				if(downloadFile(file))
-				{
-					phaser.arrive();
-				}
-				else
-				{
-					mainFrame.showError(Config.getString("error.download_error"), "", () -> System.exit(EXIT_CODE_NETWORK_FAILURE));
-				}
-			});
-		}
-
-		phaser.arriveAndAwaitAdvance();
-
-		if(repair)
-			clearCache();
-
-		networkExecutorService.shutdown();
-		isUpdating = false;
-
-		mainFrame.showInfo("status.check_success");
-		mainFrame.setStatus("status.ready", 100);
-	}
-
-	public boolean isUpdating()
-	{
-		return isUpdating;
-	}
-
-	private boolean downloadFile(UpdateFile file)
-	{
-		String checksum_sha256 = file.sha256;
-		for(int mirror_index = 0; mirror_index < FeedManager.DOWNLOAD_MIRRORS.length; mirror_index++)
-		{
-			if(disabledMirrors.contains(mirror_index))
-			{
-				continue;
-			}
-
-			if(!Util.downloadUrlToFile(httpClient, FeedManager.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster(), getFile(file.name + ".TEMPORARY")))
-			{
-				mainFrame.showInfo("status.files.failed_download", file.name, mirror_index);
-				disabledMirrors.add(mirror_index);
-				continue;
-			}
-
-			System.out.println("Downloaded new " + file.name + ".TEMPORARY");
-
-			File temporary_file = getFile(file.name + ".TEMPORARY");
-
-			System.out.println("Requested file download to " + temporary_file.getAbsolutePath());
-
-			String new_sha256_hash = Util.calculateHash("SHA-256", temporary_file);
-			if(!checksum_sha256.equalsIgnoreCase(new_sha256_hash))
-			{
-				mainFrame.showInfo(Config.getString("status.files.failed_checksum", file.name, checksum_sha256, new_sha256_hash, mirror_index));
-
-				if(temporary_file.isFile() && temporary_file.exists())
-				{
-					temporary_file.delete();
-				}
-
-				disabledMirrors.add(mirror_index);
-				continue;
-			}
-
-			File old_file = getFile(file.name);
-			if(old_file.isFile() && old_file.exists() && !old_file.delete())
-			{
-				//This is a fail case, changing mirror will not help.
-				mainFrame.showError(Config.getString("status.title.fatal_error", old_file.getPath()), Config.getString("status.title.fatal_error"));
-				return false;
-			}
-
-			if(!temporary_file.renameTo(old_file))
-			{
-				//This is a fail case, changing mirror will not help.
-				mainFrame.showError(Config.getString("status.title.fatal_error", temporary_file.getPath(), old_file.getPath()), Config.getString("status.title.fatal_error"));
-				return false;
-			}
-			return true;
-		}
-
-		return false;
-	}
-
-	private void clearCache()
-	{
-		mainFrame.showInfo("status.delete_caches");
-		if(!getFile("PokeMMO.exe").exists())
-		{
-			return;
-		}
-
-		File cache_folder = getFile("cache");
-		if(!cache_folder.exists() || (!Files.isSymbolicLink(cache_folder.toPath()) && !cache_folder.isDirectory()))
-		{
-			return;
-		}
-
-		File[] cache_files = cache_folder.listFiles(f ->
-		{
-			if(f.isDirectory() || !f.isFile())
-			{
-				return false;
-			}
-
-			return f.getName().toLowerCase(Locale.ENGLISH).endsWith(".bin");
-		});
-
-		if(cache_files == null)
-		{
-			return;
-		}
-
-		for(File cache_file : cache_files)
-		{
-			if(cache_file.delete())
-			{
-				mainFrame.showInfo("status.delete_cache_file", cache_file.getPath());
-			}
-		}
 	}
 
 	private void downloadFeeds()
 	{
-		mainFrame.setStatus("status.networking.load", 0);
-		FeedManager.load(mainFrame);
+		threadBridge.setStatus(Config.getString("status.networking.load"), 0);
+		FeedManager.load(threadBridge);
 
-		if(!FeedManager.SUCCESSFUL)
+		if(!FeedManager.isSuccessful())
 		{
-			mainFrame.showErrorWithStacktrace(Config.getString("status.networking.feed_load_failed"), Config.getString("status.title.network_failure"), "UPDATE_FEED_FAILURE_1", () -> System.exit(EXIT_CODE_NETWORK_FAILURE));
+			Throwable feedException = FeedManager.getLastException();
+			if(feedException == null)
+			{
+				feedException = new Exception(Config.getString("status.networking.feed_load_failed") +
+						"\n\nDetails:\n" + FeedManager.getLastExceptionDetails());
+			}
+
+			final Throwable exceptionToShow = feedException;
+
+			threadBridge.asyncExec(() -> errorDialog.show(exceptionToShow, ErrorDialog.ErrorType.NETWORK));
 		}
 	}
 
-	private File getFile(String path)
+	public void retryConnection()
 	{
-		return new File(pokemmoDir + path);
+		mainWindow.clearTaskOutput();
+		mainWindow.setCanStart(false);
+
+		FeedManager.resetForRetry();
+
+		mainWindow.addTaskLine(Config.getString("status.retrying_connection"));
+
+		initializeInstaller();
 	}
 
-	public File getPokemmoDir()
+	public void launchGame()
 	{
-		return new File(pokemmoDir);
+		if(isLaunching.getAndSet(true) || isUpdating.get())
+		{
+			return;
+		}
+
+		backgroundExecutor.submit(() -> {
+			try
+			{
+				Process gameProcess = LauncherUtils.launchGame();
+
+				System.out.println("Game process launched successfully, PID: " + gameProcess.pid());
+
+				System.exit(EXIT_CODE_SUCCESS);
+			}
+			catch(IOException e)
+			{
+				e.printStackTrace();
+				isLaunching.set(false);
+				threadBridge.showError(
+						Config.getString("status.failed_startup"),
+						Config.getString("status.title.failed_startup"),
+						null
+				);
+			}
+		});
 	}
 
 	public void createPokemmoDir()
 	{
-		File f = getPokemmoDir();
-		if(!f.mkdirs() && !f.exists())
+		if(!LauncherUtils.createPokemmoDir())
 		{
-			mainFrame.showError(Config.getString("error.dir_not_accessible", pokemmoDir, "DIR_1"), "", () -> System.exit(EXIT_CODE_IO_FAILURE));
+			threadBridge.showError(
+					Config.getString("error.dir_not_accessible", LauncherUtils.getPokemmoDir(), "DIR_1"),
+					"Directory Error",
+					() -> System.exit(EXIT_CODE_IO_FAILURE)
+			);
 		}
 	}
 
 	public void createSymlinkedDirectories()
 	{
-		// Screenshots symlink is only created if XDG_PICTURES_DIR is set. There is no way to predict what the pictures directory is otherwise set to, due to each DE implementing its own (and potentially different languages)
-		String xdg_pictures_home = System.getenv("XDG_PICTURES_DIR");
-		if(xdg_pictures_home != null)
+		String xdgPicturesHome = System.getenv("XDG_PICTURES_DIR");
+		if(xdgPicturesHome != null)
 		{
-			File screenshots = new File(xdg_pictures_home + "/PokeMMO Screenshots/");
-
+			File screenshots = new File(xdgPicturesHome + "/PokeMMO Screenshots/");
 			if(!screenshots.exists() && screenshots.mkdir())
 			{
 				try
 				{
-					Files.createSymbolicLink(new File(pokemmoDir + "/screenshots").toPath(), screenshots.toPath());
+					Path link = new File(LauncherUtils.getPokemmoDir() + "/screenshots").toPath();
+					if(!Files.exists(link))
+					{
+						Files.createSymbolicLink(link, screenshots.toPath());
+					}
 				}
 				catch(IOException e)
 				{
-					// Something has already set these up
-					e.printStackTrace();
+					System.err.println("Failed to create screenshots symlink: " + e.getMessage());
 				}
 			}
 		}
 	}
 
-	public String getStacktraceString(Throwable[] t)
+	public File getPokemmoDir()
 	{
-		StringBuilder sb = new StringBuilder();
-		for(Throwable x : t)
-		{
-			if(!sb.isEmpty())
-				sb.append("\n");
-
-			sb.append(getStacktraceString(x));
-		}
-
-		return sb.toString();
+		return new File(LauncherUtils.getPokemmoDir());
 	}
 
-	public String getStacktraceString(Throwable t)
+	public boolean isUpdating()
 	{
-		stackTracePrintWriter.flush();
-		stackTraceStringWriter.flush();
-		t.printStackTrace(stackTracePrintWriter);
-		return stackTraceStringWriter.toString();
+		return isUpdating.get();
+	}
+
+	public void setUpdating(boolean updating)
+	{
+		isUpdating.set(updating);
+	}
+
+	public ConfigWindow getConfigWindow()
+	{
+		return configWindow;
+	}
+
+	public MainWindow getMainWindow()
+	{
+		return mainWindow;
+	}
+
+	public ErrorDialog getErrorDialog()
+	{
+		return errorDialog;
+	}
+
+	public UpdaterService getUpdaterService()
+	{
+		return updaterService;
+	}
+
+	public ImGuiThreadBridge getThreadBridge()
+	{
+		return threadBridge;
 	}
 
 	public static void main(String[] args)
 	{
-		Config.load();
-
-		if(GnomeThemeDetector.isDark())
-		{
-			FlatDarkLaf.setup();
-		}
-		else
-		{
-			FlatLightLaf.setup();
-		}
-
-		Runtime.getRuntime().addShutdownHook(new Thread(Config::save));
-		UIManager.getLookAndFeelDefaults().put("defaultFont", new Font(Font.SANS_SERIF, Font.PLAIN, 14));
-
 		for(String arg : args)
 		{
 			if(arg.equals("--force-ui"))
 			{
+				FORCE_UI = true;
 				QUICK_AUTOSTART = false;
 				break;
 			}
 		}
 
-		new UnixInstaller().run();
+		Config.load();
+
+		if(!FORCE_UI)
+		{
+			HeadlessLauncher headless = new HeadlessLauncher();
+			try
+			{
+				if(headless.tryLaunchWithoutUI())
+				{
+					System.exit(EXIT_CODE_SUCCESS);
+				}
+
+				headlessException = headless.getNetworkException();
+			}
+			catch(Exception e)
+			{
+				headlessException = e;
+			}
+
+			System.out.println("=================================================");
+			System.out.println("[INFO] Launching installer UI");
+			System.out.println("Reason: " + headless.getUIReason());
+			if(headlessException != null)
+			{
+				System.out.println("Exception: " + headlessException);
+			}
+			System.out.println("=================================================");
+		}
+		else
+		{
+			System.out.println("=================================================");
+			System.out.println("[INFO] UI mode forced via --force-ui flag");
+			System.out.println("=================================================");
+		}
+
+		detectAndLogDisplayServer();
+		launch(new UnixInstaller());
+	}
+
+	private static void detectAndLogDisplayServer()
+	{
+		System.out.println("=================================================");
+		System.out.println("[DEBUG] Display Server Detection:");
+
+		// Primary detection methods
+		String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
+		String xdgSessionType = System.getenv("XDG_SESSION_TYPE");
+		String display = System.getenv("DISPLAY");
+
+		// Desktop environment detection
+		String xdgCurrentDesktop = System.getenv("XDG_CURRENT_DESKTOP");
+		String desktopSession = System.getenv("DESKTOP_SESSION");
+		String kdeFullSession = System.getenv("KDE_FULL_SESSION");
+
+		// Container detection
+		String flatpakId = System.getenv("FLATPAK_ID");
+		String snapName = System.getenv("SNAP_NAME");
+		String snapRevision = System.getenv("SNAP_REVISION");
+
+		// Determine display server
+		String displayServer = "Unknown";
+		if("wayland".equalsIgnoreCase(xdgSessionType) || waylandDisplay != null)
+		{
+			displayServer = "Wayland";
+			if(waylandDisplay != null)
+			{
+				displayServer += " (WAYLAND_DISPLAY=" + waylandDisplay + ")";
+
+				GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
+				GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
+			}
+		}
+		else if("x11".equalsIgnoreCase(xdgSessionType) || display != null)
+		{
+			displayServer = "X11";
+			if(display != null)
+			{
+				displayServer += " (DISPLAY=" + display + ")";
+			}
+		}
+
+		System.out.println("Display Server: " + displayServer);
+		System.out.println("XDG_SESSION_TYPE: " + (xdgSessionType != null ? xdgSessionType : "not set"));
+
+		// Desktop environment
+		System.out.println("Desktop Environment: " +
+				(xdgCurrentDesktop != null ? xdgCurrentDesktop : "unknown"));
+		if(desktopSession != null)
+		{
+			System.out.println("Desktop Session: " + desktopSession);
+		}
+
+		// Specific DE detection
+		if(kdeFullSession != null)
+		{
+			System.out.println("KDE Detected: KDE_FULL_SESSION=" + kdeFullSession);
+		}
+
+		// Container environment
+		if(flatpakId != null)
+		{
+			System.out.println("Running in Flatpak: " + flatpakId);
+		}
+		if(snapName != null)
+		{
+			System.out.println("Running in Snap: " + snapName + " (rev: " + snapRevision + ")");
+		}
+
+		// Theme detection
+		boolean isDarkTheme = GnomeThemeDetector.isDark();
+		System.out.println("Theme Detection: " + (isDarkTheme ? "Dark" : "Light"));
+
+		// Additional environment info
+		String gtkTheme = System.getenv("GTK_THEME");
+		if(gtkTheme != null)
+		{
+			System.out.println("GTK_THEME: " + gtkTheme);
+		}
+
+		String qtStyle = System.getenv("QT_STYLE_OVERRIDE");
+		if(qtStyle != null)
+		{
+			System.out.println("QT_STYLE_OVERRIDE: " + qtStyle);
+		}
+
+		// Graphics info
+		String glVendor = System.getProperty("jogl.vendor");
+		String glRenderer = System.getProperty("jogl.renderer");
+		if(glVendor != null || glRenderer != null)
+		{
+			System.out.println("Graphics: " +
+					(glVendor != null ? glVendor : "unknown") + " / " +
+					(glRenderer != null ? glRenderer : "unknown"));
+		}
+
+		System.out.println("=================================================");
 	}
 }

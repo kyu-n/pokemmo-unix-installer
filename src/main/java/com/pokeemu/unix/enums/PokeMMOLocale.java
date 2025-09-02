@@ -6,9 +6,6 @@ import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.stream.Stream;
 
-/**
- * @author Kyu
- */
 public enum PokeMMOLocale
 {
 	en("English", "en", true),
@@ -83,7 +80,6 @@ public enum PokeMMOLocale
 
 	public static PokeMMOLocale getFromLocale(Locale locale)
 	{
-		// Check once for a precise match (e.g. ZH-TW)
 		for(var lang : ENABLED_LANGUAGES)
 		{
 			if(locale.toLanguageTag().equals(lang.getLangTag()))
@@ -92,7 +88,6 @@ public enum PokeMMOLocale
 			}
 		}
 
-		// Test for an ISO-639-1 match
 		for(var lang : ENABLED_LANGUAGES)
 		{
 			if(locale.getLanguage().equals(lang.getLangTag()))
@@ -101,7 +96,6 @@ public enum PokeMMOLocale
 			}
 		}
 
-		// Default
 		return PokeMMOLocale.en;
 	}
 

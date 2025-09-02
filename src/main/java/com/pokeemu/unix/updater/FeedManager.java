@@ -74,6 +74,12 @@ public class FeedManager
 	private static String lastFailedMirror = null;
 	private static final List<MirrorFailure> allFailures = new ArrayList<>();
 
+	// Store raw feed data for transfer to game client
+	private static volatile byte[] mainFeedRaw = null;
+	private static volatile byte[] updateFeedRaw = null;
+	private static volatile byte[] mainSignatureRaw = null;
+	private static volatile byte[] updateSignatureRaw = null;
+
 	private static class MirrorFailure
 	{
 		final String mirror;
@@ -204,7 +210,6 @@ public class FeedManager
 			clearState();
 			shutdownRequested = false;
 
-			// Create and store the operation inside the lock to prevent race conditions
 			currentLoadOperation = createLoadOperation(progressReporter);
 			return currentLoadOperation;
 		});
@@ -300,7 +305,6 @@ public class FeedManager
 		return CompletableFuture
 				.supplyAsync(() -> tryMirror(mirror, sig_format, pub_key, progressReporter))
 				.exceptionally(error -> {
-					// Record the failure but preserve the exception for logging
 					recordFailure(mirror, error);
 					System.err.println("Mirror attempt failed for " + mirror + ": " + error.getMessage());
 					error.printStackTrace();
@@ -320,10 +324,8 @@ public class FeedManager
 
 					long delay = calculateRetryDelay(attempt);
 
-					// Create delayed retry with shutdown check after delay
 					CompletableFuture<Boolean> delayedRetry = new CompletableFuture<>();
 					CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS).execute(() -> {
-						// Check if shutdown was requested during the delay
 						if(shutdownRequested)
 						{
 							delayedRetry.complete(false);
@@ -363,6 +365,11 @@ public class FeedManager
 		lastFailedMirror = null;
 		allFailures.clear();
 		currentLoadOperation = null;
+
+		mainFeedRaw = null;
+		updateFeedRaw = null;
+		mainSignatureRaw = null;
+		updateSignatureRaw = null;
 	}
 
 	private static boolean hasNonRetryableError()
@@ -440,7 +447,7 @@ public class FeedManager
 				return false;
 			}
 
-			return processFeedData(mainFeed.content, updateFeed.content);
+			return processFeedData(mainFeed, updateFeed);
 		}
 		catch(Exception e)
 		{
@@ -489,7 +496,6 @@ public class FeedManager
 			return null;
 		}
 
-		// Add null checks for HTTP responses
 		HttpResponse<InputStream> feedResp = feedResponse.get();
 		HttpResponse<InputStream> sigResp = signatureResponse.get();
 
@@ -545,9 +551,9 @@ public class FeedManager
 		return e;
 	}
 
-	private static boolean processFeedData(byte[] mainFeedRaw, byte[] updateFeedRaw) throws Exception
+	private static boolean processFeedData(FeedData mainFeed, FeedData updateFeed) throws Exception
 	{
-		Document mainDoc = parseXmlDocument(new String(mainFeedRaw));
+		Document mainDoc = parseXmlDocument(new String(mainFeed.content));
 		Element main_feed = (Element) mainDoc.getElementsByTagName("main_feed").item(0);
 
 		int tempRevision = 0;
@@ -556,7 +562,7 @@ public class FeedManager
 			tempRevision = Integer.parseInt(main_feed.getElementsByTagName("min_revision").item(0).getTextContent());
 		}
 
-		Document updateDoc = parseXmlDocument(new String(updateFeedRaw));
+		Document updateDoc = parseXmlDocument(new String(updateFeed.content));
 		Element update_feed = (Element) updateDoc.getElementsByTagName("update_feed").item(0);
 
 		List<UpdateFile> tempFiles = parseUpdateFiles(update_feed);
@@ -568,6 +574,11 @@ public class FeedManager
 				MIN_REVISION = finalRevision;
 				files.clear();
 				files.addAll(tempFiles);
+
+				mainFeedRaw = mainFeed.content;
+				updateFeedRaw = updateFeed.content;
+				mainSignatureRaw = mainFeed.signature;
+				updateSignatureRaw = updateFeed.signature;
 			});
 			return true;
 		}
@@ -645,6 +656,49 @@ public class FeedManager
 					() -> System.exit(UnixInstaller.EXIT_CODE_NETWORK_FAILURE)
 			);
 		}
+	}
+
+	public static boolean hasFeedData()
+	{
+		return executeWithReadLock(() -> mainFeedRaw != null && updateFeedRaw != null);
+	}
+
+	public static byte[] getMainFeedRaw()
+	{
+		return executeWithReadLock(() -> mainFeedRaw);
+	}
+
+	public static byte[] getUpdateFeedRaw()
+	{
+		return executeWithReadLock(() -> updateFeedRaw);
+	}
+
+	public static byte[] getMainSignatureRaw()
+	{
+		return executeWithReadLock(() -> mainSignatureRaw);
+	}
+
+	public static byte[] getUpdateSignatureRaw()
+	{
+		return executeWithReadLock(() -> updateSignatureRaw);
+	}
+
+	// Create a socket server for feed data transfer
+	public static FeedSocketServer createFeedSocketServer()
+	{
+		return executeWithReadLock(() -> {
+			if(!hasFeedData())
+			{
+				return null;
+			}
+
+			return new FeedSocketServer(
+					mainFeedRaw,
+					updateFeedRaw,
+					mainSignatureRaw,
+					updateSignatureRaw
+			);
+		});
 	}
 
 	private static <T> T executeWithReadLock(java.util.function.Supplier<T> action)

@@ -179,11 +179,11 @@ public class UpdaterService
 
 	private boolean ensureParentDirectory(File file)
 	{
-		File parent = file.getParentFile();
-		if(!parent.exists() && !parent.mkdirs())
+		File parentDir = file.getParentFile();
+		if(!parentDir.exists() && !parentDir.mkdirs())
 		{
 			progressReporter.showError(
-					Config.getString("error.dir_not_accessible", parent, "DIR_8"), "", null);
+					Config.getString("error.dir_not_accessible", parentDir, "DIR_8"), "", null);
 			this.parent.setUpdating(false);
 			return false;
 		}

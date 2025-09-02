@@ -13,6 +13,7 @@ import java.util.Objects;
 
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.updater.FeedManager;
+import com.pokeemu.unix.updater.FeedSocketServer;
 import com.pokeemu.unix.updater.UpdateFile;
 import com.pokeemu.unix.util.Util;
 
@@ -29,6 +30,7 @@ public class LauncherUtils
 
 	private static String pokemmoDir;
 	private static String jrePath;
+	private static FeedSocketServer feedSocketServer;
 
 	static
 	{
@@ -213,7 +215,6 @@ public class LauncherUtils
 	{
 		Map<String, String> env = new HashMap<>();
 
-		env.put("GTK_USE_PORTALS", "1");
 		env.put("POKEMMO_UNIX_LAUNCHER_VER", Integer.toString(UnixInstaller.INSTALLER_VERSION));
 
 		if(snapcraft != null)
@@ -235,22 +236,95 @@ public class LauncherUtils
 			throw new IllegalStateException("setupDirectories() must be called first");
 		}
 
+		// Start feed socket server if feeds are available
+		String socketPath = null;
+		if(FeedManager.hasFeedData())
+		{
+			try
+			{
+				feedSocketServer = FeedManager.createFeedSocketServer();
+				if(feedSocketServer != null)
+				{
+					socketPath = feedSocketServer.start();
+				}
+			}
+			catch(IOException e)
+			{
+				System.err.println("Failed to start feed socket server: " + e.getMessage());
+				e.printStackTrace();
+			}
+		}
+
 		List<String> args = buildJvmArgs();
 
 		ProcessBuilder pb = new ProcessBuilder(args);
 		pb.directory(new File(pokemmoDir));
 		pb.inheritIO();
 
-		pb.environment().putAll(buildEnvironment());
+		Map<String, String> environment = buildEnvironment();
+
+		if(socketPath != null)
+		{
+			environment.put("POKEMMO_FEED_SOCKET", socketPath);
+			System.out.println("Passing feed socket to game: " + socketPath);
+		}
+
+		pb.environment().putAll(environment);
 
 		System.out.println("Launching game: " + String.join(" ", args));
 
 		return pb.start();
 	}
 
+	/**
+	 * Wait for the feed socket operation to complete before exiting
+	 */
+	public static void waitForSocketCompletion()
+	{
+		if(feedSocketServer != null)
+		{
+			// Wait for socket server to finish (it has its own 10-second timeout)
+			// Maximum wait of 15 seconds as a failsafe
+			for(int i = 0; i < 150; i++)
+			{
+				if(!feedSocketServer.isRunning())
+				{
+					break;
+				}
+
+				try
+				{
+					Thread.sleep(100);
+				}
+				catch(InterruptedException e)
+				{
+					Thread.currentThread().interrupt();
+					break;
+				}
+			}
+
+			cleanupFeedSocket();
+		}
+	}
+
+	private static void cleanupFeedSocket()
+	{
+		if(feedSocketServer != null)
+		{
+			System.out.println("Cleaning up feed socket server");
+			feedSocketServer.stop();
+			feedSocketServer = null;
+		}
+	}
+
 	public static boolean createPokemmoDir()
 	{
 		File f = new File(pokemmoDir);
 		return f.exists() || f.mkdirs();
+	}
+
+	static
+	{
+		Runtime.getRuntime().addShutdownHook(new Thread(LauncherUtils::cleanupFeedSocket, "LauncherUtils-Cleanup"));
 	}
 }

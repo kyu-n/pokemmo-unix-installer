@@ -341,16 +341,22 @@ public class UnixInstaller extends Application
 
 				System.out.println("Game process launched successfully, PID: " + gameProcess.pid());
 
+				threadBridge.asyncExec(() -> {
+					System.out.println("Closing launcher UI for socket transfer...");
+					disposeWindow();
+				});
+
+				LauncherUtils.waitForSocketCompletion();
 				System.exit(EXIT_CODE_SUCCESS);
 			}
-			catch(Exception e)
+			catch(IOException e)
 			{
 				e.printStackTrace();
 				isLaunching.set(false);
 				threadBridge.showError(
 						Config.getString("status.failed_startup"),
 						Config.getString("status.title.failed_startup"),
-						() -> System.exit(EXIT_CODE_IO_FAILURE)
+						null
 				);
 			}
 		});

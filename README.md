@@ -1,6 +1,6 @@
 # PokeMMO Unix Installer
 
-[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/pokemmo)
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/pokemmo) [![Get it from Flathub](https://flathub.org/api/badge?svg&locale=en&light)](https://flathub.org/apps/com.pokemmo.PokeMMO)
 
 This program manages:
 

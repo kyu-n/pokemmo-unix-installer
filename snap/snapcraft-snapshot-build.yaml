@@ -1,3 +1,5 @@
+# Special snapcraft file used for building jar snapshot .snaps
+# Only used in development
 name: pokemmo
 title: PokeMMO
 base: core24
@@ -54,20 +56,48 @@ apps:
       LIBDECOR_PLUGIN_DIR: $SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/libdecor/plugins-1
 
 parts:
+  gradle:
+    plugin: nil
+    override-pull: |
+      curl --connect-timeout 5 --retry 5 -L https://services.gradle.org/distributions/gradle-8.14.3-bin.zip -o gradle-8.14.3-bin.zip
+      mv gradle-8.14.3-bin.zip $CRAFT_STAGE/
+    build-packages:
+      - curl
   pokemmo:
+    after: [ gradle ]
     plugin: dump
-    source: https://github.com/kyu-n/pokemmo-unix-installer/releases/download/v2.0c-stable/v2.0c-stable.zip
-    source-type: zip
+    source: https://github.com/kyu-n/pokemmo-unix-installer.git
+    source-type: git
+    build-environment:
+      - GRADLE_USER_HOME: "$CRAFT_PART_BUILD/.gradle"
+      # These proxy settings ensure Gradle can download dependencies while running on snapcraft.io
+      - GRADLE_OPTS: "-Djava.net.useSystemProxies=true -Dfile.encoding=UTF-8"
+      - JAVA_OPTS: "-Djava.net.useSystemProxies=true"
+    override-pull: |
+      craftctl default
+      cp $CRAFT_STAGE/gradle-8.14.3-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-8.14.3-bin.zip
     override-build: |
-      # The JAR is already extracted by the dump plugin
-      mkdir -p $CRAFT_PART_INSTALL/jar
-      cp unix-installer.jar $CRAFT_PART_INSTALL/jar/
+      set -ex
       
-      # Handle runtime directory
-      mkdir -p $CRAFT_PART_INSTALL/runtime
-      cp -r /usr/lib/jvm/bellsoft-java21-*/* $CRAFT_PART_INSTALL/runtime/ || true
+      # Libdecor directory structure required
+      mkdir -p $SNAPCRAFT_PART_INSTALL/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/libdecor/plugins-1/
+      
+      # Set JRE target based on architecture
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-amd64" ;;
+        arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-aarch64" ;;
+      esac
+      
+      # Set Java home for the build
+      export JAVA_HOME="${JRE_TARGET}"
+      
+      ./gradlew assemble --no-daemon --stacktrace
+      
+      # Install built artifacts
+      mkdir -p $CRAFT_PART_INSTALL/jar
+      cp build/libs/unix-installer.jar $CRAFT_PART_INSTALL/jar/unix-installer.jar
+      mv build/runtime $CRAFT_PART_INSTALL/
     stage-packages:
-      - bellsoft-java21-runtime
       - libglu1-mesa
       - zenity
       - libdecor-0-0

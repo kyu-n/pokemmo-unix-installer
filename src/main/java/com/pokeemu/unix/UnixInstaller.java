@@ -20,6 +20,8 @@ import com.pokeemu.unix.ui.MessageDialog;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdaterService;
 
+import com.pokeemu.unix.util.GnomeThemeDetector;
+
 import imgui.ImGui;
 import imgui.app.Application;
 import imgui.app.Configuration;
@@ -72,6 +74,9 @@ public class UnixInstaller extends Application
 
 		LocalizationManager.instance.initializeFonts();
 		ImGuiStyleManager.applySystemTheme();
+
+		// Debug: Display server detection
+		detectAndLogDisplayServer();
 
 		threadBridge = new ImGuiThreadBridge();
 		mainWindow = new MainWindow(this, threadBridge, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -476,5 +481,106 @@ public class UnixInstaller extends Application
 		}
 
 		launch(new UnixInstaller());
+	}
+
+	private void detectAndLogDisplayServer()
+	{
+		System.out.println("=================================================");
+		System.out.println("[DEBUG] Display Server Detection:");
+
+		// Primary detection methods
+		String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
+		String xdgSessionType = System.getenv("XDG_SESSION_TYPE");
+		String display = System.getenv("DISPLAY");
+
+		// Desktop environment detection
+		String xdgCurrentDesktop = System.getenv("XDG_CURRENT_DESKTOP");
+		String desktopSession = System.getenv("DESKTOP_SESSION");
+		String kdeFullSession = System.getenv("KDE_FULL_SESSION");
+		String gnomeDesktopSessionId = System.getenv("GNOME_DESKTOP_SESSION_ID");
+
+		// Container detection
+		String flatpakId = System.getenv("FLATPAK_ID");
+		String snapName = System.getenv("SNAP_NAME");
+		String snapRevision = System.getenv("SNAP_REVISION");
+
+		// Determine display server
+		String displayServer = "Unknown";
+		if("wayland".equalsIgnoreCase(xdgSessionType) || waylandDisplay != null)
+		{
+			displayServer = "Wayland";
+			if(waylandDisplay != null)
+			{
+				displayServer += " (WAYLAND_DISPLAY=" + waylandDisplay + ")";
+			}
+		}
+		else if("x11".equalsIgnoreCase(xdgSessionType) || display != null)
+		{
+			displayServer = "X11";
+			if(display != null)
+			{
+				displayServer += " (DISPLAY=" + display + ")";
+			}
+		}
+
+		System.out.println("Display Server: " + displayServer);
+		System.out.println("XDG_SESSION_TYPE: " + (xdgSessionType != null ? xdgSessionType : "not set"));
+
+		// Desktop environment
+		System.out.println("Desktop Environment: " +
+				(xdgCurrentDesktop != null ? xdgCurrentDesktop : "unknown"));
+		if(desktopSession != null)
+		{
+			System.out.println("Desktop Session: " + desktopSession);
+		}
+
+		// Specific DE detection
+		if(kdeFullSession != null)
+		{
+			System.out.println("KDE Detected: KDE_FULL_SESSION=" + kdeFullSession);
+		}
+		if(gnomeDesktopSessionId != null)
+		{
+			System.out.println("GNOME Detected: GNOME_DESKTOP_SESSION_ID=" + gnomeDesktopSessionId);
+		}
+
+		// Container environment
+		if(flatpakId != null)
+		{
+			System.out.println("Running in Flatpak: " + flatpakId);
+		}
+		if(snapName != null)
+		{
+			System.out.println("Running in Snap: " + snapName + " (rev: " + snapRevision + ")");
+		}
+
+		// Theme detection
+		boolean isDarkTheme = GnomeThemeDetector.isDark();
+		System.out.println("Theme Detection: " + (isDarkTheme ? "Dark" : "Light"));
+
+		// Additional environment info
+		String gtkTheme = System.getenv("GTK_THEME");
+		if(gtkTheme != null)
+		{
+			System.out.println("GTK_THEME: " + gtkTheme);
+		}
+
+		String qtStyle = System.getenv("QT_STYLE_OVERRIDE");
+		if(qtStyle != null)
+		{
+			System.out.println("QT_STYLE_OVERRIDE: " + qtStyle);
+		}
+
+		// Graphics info
+		String glVendor = System.getProperty("jogl.vendor");
+		String glRenderer = System.getProperty("jogl.renderer");
+		if(glVendor != null || glRenderer != null)
+		{
+			System.out.println("Graphics: " +
+					(glVendor != null ? glVendor : "unknown") + " / " +
+					(glRenderer != null ? glRenderer : "unknown"));
+		}
+
+		System.out.println("=================================================");
 	}
 }

@@ -27,6 +27,8 @@ import imgui.app.Application;
 import imgui.app.Configuration;
 import imgui.flag.ImGuiConfigFlags;
 
+import org.lwjgl.glfw.GLFW;
+
 public class UnixInstaller extends Application
 {
 	public static final int INSTALLER_VERSION = 30;
@@ -74,9 +76,6 @@ public class UnixInstaller extends Application
 
 		LocalizationManager.instance.initializeFonts();
 		ImGuiStyleManager.applySystemTheme();
-
-		// Debug: Display server detection
-		detectAndLogDisplayServer();
 
 		threadBridge = new ImGuiThreadBridge();
 		mainWindow = new MainWindow(this, threadBridge, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -480,10 +479,11 @@ public class UnixInstaller extends Application
 			System.out.println("=================================================");
 		}
 
+		detectAndLogDisplayServer();
 		launch(new UnixInstaller());
 	}
 
-	private void detectAndLogDisplayServer()
+	private static void detectAndLogDisplayServer()
 	{
 		System.out.println("=================================================");
 		System.out.println("[DEBUG] Display Server Detection:");
@@ -497,7 +497,6 @@ public class UnixInstaller extends Application
 		String xdgCurrentDesktop = System.getenv("XDG_CURRENT_DESKTOP");
 		String desktopSession = System.getenv("DESKTOP_SESSION");
 		String kdeFullSession = System.getenv("KDE_FULL_SESSION");
-		String gnomeDesktopSessionId = System.getenv("GNOME_DESKTOP_SESSION_ID");
 
 		// Container detection
 		String flatpakId = System.getenv("FLATPAK_ID");
@@ -512,6 +511,9 @@ public class UnixInstaller extends Application
 			if(waylandDisplay != null)
 			{
 				displayServer += " (WAYLAND_DISPLAY=" + waylandDisplay + ")";
+
+				GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
+				GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
 			}
 		}
 		else if("x11".equalsIgnoreCase(xdgSessionType) || display != null)
@@ -538,10 +540,6 @@ public class UnixInstaller extends Application
 		if(kdeFullSession != null)
 		{
 			System.out.println("KDE Detected: KDE_FULL_SESSION=" + kdeFullSession);
-		}
-		if(gnomeDesktopSessionId != null)
-		{
-			System.out.println("GNOME Detected: GNOME_DESKTOP_SESSION_ID=" + gnomeDesktopSessionId);
 		}
 
 		// Container environment

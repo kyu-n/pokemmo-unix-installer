@@ -4,6 +4,7 @@ import com.pokeemu.unix.UnixInstaller;
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.enums.PokeMMOLocale;
 import com.pokeemu.unix.enums.UpdateChannel;
+import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.util.Util;
 
 import imgui.ImGui;
@@ -205,7 +206,7 @@ public class ConfigWindow extends AbstractModalWindow
 
 	private void renderActions()
 	{
-		boolean isUpdating = parent.isUpdating();
+		boolean isUpdating = parent.isUpdating() || !FeedManager.isSuccessful();
 		if(isUpdating)
 		{
 			ImGui.beginDisabled();
@@ -231,9 +232,19 @@ public class ConfigWindow extends AbstractModalWindow
 		float buttonWidth = 100.0f;
 		ImGui.setCursorPosX(ImGui.getWindowWidth() - buttonWidth - ImGui.getStyle().getWindowPaddingX());
 
+		if(isUpdating)
+		{
+			ImGui.endDisabled();
+		}
+
 		if(ImGui.button(Config.getString("button.close"), buttonWidth, 0))
 		{
 			close();
+		}
+
+		if(isUpdating)
+		{
+			ImGui.beginDisabled();
 		}
 
 		if(ImGui.button(Config.getString("config.title.repair_client")))

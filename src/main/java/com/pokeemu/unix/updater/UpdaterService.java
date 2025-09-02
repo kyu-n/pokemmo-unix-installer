@@ -9,18 +9,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -36,104 +32,15 @@ public class UpdaterService
 	private final IProgressReporter progressReporter;
 	private final ExecutorService downloadExecutor;
 	private final ScheduledExecutorService speedCalculator;
+	private final ProgressTracker progress;
+	private final TempFileManager tempFiles;
 
 	private final Set<Integer> disabledMirrors = Collections.synchronizedSet(new HashSet<>());
-
-	private final Map<String, DownloadTask> activeTasks = new ConcurrentHashMap<>();
-	private final AtomicLong totalBytesDownloaded = new AtomicLong(0);
-	private final AtomicLong lastBytesDownloaded = new AtomicLong(0);
-	private final AtomicInteger completedFiles = new AtomicInteger(0);
-	private volatile long lastSpeedCalculation = System.currentTimeMillis();
-
 	private volatile boolean isShuttingDown = false;
-
-	private final Set<Path> activeTempFiles = ConcurrentHashMap.newKeySet();
-	private static final String TEMP_PREFIX = "pokemmo_download_";
-	private static final String TEMP_SUFFIX = ".tmp";
-
-	private final Thread shutdownHook;
-
-	private final AtomicBoolean cleanupPerformed = new AtomicBoolean(false);
-	private final AtomicBoolean shutdownHookRegistered = new AtomicBoolean(false);
 
 	static
 	{
-		cleanupOrphanedTempFiles();
-	}
-
-	private static void cleanupOrphanedTempFiles()
-	{
-		try
-		{
-			LauncherUtils.setupDirectories();
-			File dir = new File(LauncherUtils.getPokemmoDir());
-			if(dir.exists() && dir.isDirectory())
-			{
-				File[] tempFiles = dir.listFiles((d, name) ->
-						name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX));
-
-				if(tempFiles != null)
-				{
-					for(File tempFile : tempFiles)
-					{
-						if(tempFile.delete())
-						{
-							System.out.println("Cleaned up orphaned temp file: " + tempFile.getName());
-						}
-						else
-						{
-							System.err.println("Failed to delete orphaned temp file: " + tempFile.getName());
-						}
-					}
-				}
-
-				File[] uuidTempFiles = dir.listFiles((d, name) ->
-						name.endsWith(".tmp") && name.contains("-") && name.length() > 40);
-
-				if(uuidTempFiles != null)
-				{
-					for(File tempFile : uuidTempFiles)
-					{
-						if(tempFile.delete())
-						{
-							System.out.println("Cleaned up legacy temp file: " + tempFile.getName());
-						}
-					}
-				}
-
-				cleanTempFilesRecursively(dir);
-			}
-		}
-		catch(Exception e)
-		{
-			System.err.println("Failed to cleanup temp files: " + e.getMessage());
-		}
-	}
-
-	private static void cleanTempFilesRecursively(File dir)
-	{
-		File[] subdirs = dir.listFiles(File::isDirectory);
-		if(subdirs != null)
-		{
-			for(File subdir : subdirs)
-			{
-				File[] tempFiles = subdir.listFiles((d, name) ->
-						name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX));
-
-				if(tempFiles != null)
-				{
-					for(File tempFile : tempFiles)
-					{
-						if(tempFile.delete())
-						{
-							System.out.println("Cleaned up temp file in " + subdir.getName() + ": " + tempFile.getName());
-						}
-					}
-				}
-
-				cleanTempFilesRecursively(subdir);
-			}
-		}
+		TempFileManager.cleanupOrphanedFiles();
 	}
 
 	public UpdaterService(UnixInstaller parent, IProgressReporter progressReporter)
@@ -142,64 +49,10 @@ public class UpdaterService
 		this.progressReporter = progressReporter;
 		this.downloadExecutor = Executors.newFixedThreadPool(Config.NETWORK_THREADS);
 		this.speedCalculator = Executors.newSingleThreadScheduledExecutor();
+		this.progress = new ProgressTracker(progressReporter);
+		this.tempFiles = new TempFileManager();
 
-		speedCalculator.scheduleAtFixedRate(this::calculateDownloadSpeed, 0, 1, TimeUnit.SECONDS);
-
-		shutdownHook = new Thread(this::cleanupTempFiles, "UpdaterService-Cleanup");
-
-		try
-		{
-			Runtime.getRuntime().addShutdownHook(shutdownHook);
-			shutdownHookRegistered.set(true);
-		}
-		catch(Exception e)
-		{
-			System.err.println("Failed to register shutdown hook: " + e.getMessage());
-			shutdownHookRegistered.set(false);
-		}
-	}
-
-	private void cleanupTempFiles()
-	{
-		if(!cleanupPerformed.compareAndSet(false, true))
-		{
-			return;
-		}
-
-		Iterator<Path> it = activeTempFiles.iterator();
-		while(it.hasNext())
-		{
-			Path tempFile = it.next();
-			try
-			{
-				if(Files.exists(tempFile))
-				{
-					Files.deleteIfExists(tempFile);
-				}
-			}
-			catch(IOException e)
-			{
-				System.err.println("Failed to delete temp file: " + tempFile);
-			}
-
-			it.remove();
-		}
-	}
-
-	private Path createTempFile(Path targetPath) throws IOException
-	{
-		String targetHash = Integer.toHexString(targetPath.toString().hashCode() & 0x7FFFFFFF);
-		String tempFileName = TEMP_PREFIX +
-				targetPath.getFileName().toString().replace("/", "_").replace("\\", "_") +
-				"_" + targetHash +
-				"_" + System.currentTimeMillis() +
-				TEMP_SUFFIX;
-
-		Path tempPath = targetPath.getParent().resolve(tempFileName);
-
-		Files.createDirectories(targetPath.getParent());
-
-		return tempPath;
+		speedCalculator.scheduleAtFixedRate(this::updateSpeed, 0, 1, TimeUnit.SECONDS);
 	}
 
 	public void startUpdate(boolean repair, boolean clean)
@@ -214,24 +67,15 @@ public class UpdaterService
 		CompletableFuture.runAsync(() -> {
 			try
 			{
-				if(clean)
-				{
-					performCleanInstall();
-				}
-
-				if(repair)
-				{
-					performRepair();
-				}
-				else
-				{
-					performUpdate();
-				}
+				if(clean) performCleanInstall();
+				if(repair) performRepair();
+				else performUpdate();
 			}
 			catch(Exception e)
 			{
 				e.printStackTrace();
-				progressReporter.showError("Update failed: " + e.getMessage(), "Update Error", () -> parent.setUpdating(false));
+				progressReporter.showError("Update failed: " + e.getMessage(), "Update Error",
+						() -> parent.setUpdating(false));
 			}
 		});
 	}
@@ -239,155 +83,23 @@ public class UpdaterService
 	private void performCleanInstall() throws IOException
 	{
 		progressReporter.setStatus(Config.getString("status.cleaning"), 10);
-
 		Path installPath = Path.of(parent.getPokemmoDir().getAbsolutePath());
 
 		if(Files.exists(installPath))
 		{
-			try(var pathStream = Files.walk(installPath))
-			{
-				pathStream.sorted(Comparator.reverseOrder()).forEach(path -> {
-					try
-					{
-						Files.delete(path);
-						progressReporter.showInfo("status.deleted_file", path.getFileName());
-					}
-					catch(IOException e)
-					{
-						progressReporter.showInfo("status.failed_delete", path.getFileName());
-					}
-				});
-			}
+			deleteDirectoryRecursively(installPath);
 		}
 
 		LauncherUtils.createPokemmoDir();
 		parent.createSymlinkedDirectories();
 	}
 
-	private void clearCacheDirectory()
-	{
-		progressReporter.setStatus(Config.getString("status.delete_caches"), 20);
-
-		// Clear cache directory
-		File cacheDir = new File(LauncherUtils.getPokemmoDir() + "/cache");
-
-		if(cacheDir.exists() && cacheDir.isDirectory())
-		{
-			try
-			{
-				// Walk through cache directory and delete all files
-				try(var pathStream = Files.walk(cacheDir.toPath()))
-				{
-					// Sort in reverse order to delete files before directories
-					pathStream.sorted(Comparator.reverseOrder())
-							.filter(path -> !path.equals(cacheDir.toPath())) // Don't delete the cache dir itself
-							.forEach(path -> {
-								try
-								{
-									Files.delete(path);
-									if(!Files.isDirectory(path))
-									{
-										progressReporter.showInfo("status.delete_cache_file",
-												path.getFileName().toString());
-									}
-								}
-								catch(IOException e)
-								{
-									System.err.println("Failed to delete cache file: " + path + " - " + e.getMessage());
-								}
-							});
-				}
-			}
-			catch(IOException e)
-			{
-				System.err.println("Error clearing cache directory: " + e.getMessage());
-				e.printStackTrace();
-			}
-		}
-
-		// Clear *.properties files from config directory
-		File configDir = new File(LauncherUtils.getPokemmoDir() + "/config");
-
-		if(configDir.exists() && configDir.isDirectory())
-		{
-			try
-			{
-				try(var pathStream = Files.list(configDir.toPath()))
-				{
-					pathStream.filter(path -> {
-								String fileName = path.getFileName().toString();
-								return fileName.endsWith(".properties");
-							})
-							.forEach(path -> {
-								try
-								{
-									Files.delete(path);
-									progressReporter.showInfo("status.delete_cache_file",
-											"config/" + path.getFileName().toString());
-								}
-								catch(IOException e)
-								{
-									System.err.println("Failed to delete config file: " + path + " - " + e.getMessage());
-								}
-							});
-				}
-			}
-			catch(IOException e)
-			{
-				System.err.println("Error clearing config properties files: " + e.getMessage());
-				e.printStackTrace();
-			}
-		}
-	}
-
 	private void performRepair()
 	{
-		clearCacheDirectory();
-
+		clearCaches();
 		progressReporter.setStatus(Config.getString("status.game_repair"), 30);
 
-		List<UpdateFile> toRepair = new ArrayList<>();
-		int totalFiles = FeedManager.getFiles().size();
-		int counter = 0;
-
-		for(UpdateFile file : FeedManager.getFiles())
-		{
-			if(!file.shouldDownload())
-			{
-				continue;
-			}
-
-			if(LauncherUtils.isNativeLibraryForOtherPlatform(file.name))
-			{
-				continue;
-			}
-
-			File f = LauncherUtils.getFile(file.name);
-			String checksum_sha256 = file.sha256;
-
-			if(file.only_if_not_exists && f.exists())
-			{
-				continue;
-			}
-
-			if(!f.getParentFile().exists() && !f.getParentFile().mkdirs())
-			{
-				progressReporter.showError(Config.getString("error.dir_not_accessible", f.getParentFile(), "DIR_8"), "", null);
-				parent.setUpdating(false);
-				return;
-			}
-
-			String hash_sha256 = Util.calculateHash("SHA-256", f);
-
-			if(!checksum_sha256.equalsIgnoreCase(hash_sha256))
-			{
-				progressReporter.addDetail("status.files.repairing", (counter * 100) / totalFiles, file.name);
-				toRepair.add(file);
-			}
-
-			counter++;
-		}
-
+		List<UpdateFile> toRepair = findFilesToRepair();
 		if(!toRepair.isEmpty())
 		{
 			downloadFiles(toRepair);
@@ -403,43 +115,7 @@ public class UpdaterService
 		progressReporter.addDetail("status.title.update_available", 30);
 		progressReporter.setStatus(Config.getString("status.game_download"), 30);
 
-		List<UpdateFile> toDownload = new ArrayList<>();
-
-		for(UpdateFile file : FeedManager.getFiles())
-		{
-			if(!file.shouldDownload())
-			{
-				continue;
-			}
-
-			if(LauncherUtils.isNativeLibraryForOtherPlatform(file.name))
-			{
-				continue;
-			}
-
-			File f = LauncherUtils.getFile(file.name);
-			String checksum_sha256 = file.sha256;
-
-			if(file.only_if_not_exists && f.exists())
-			{
-				continue;
-			}
-
-			if(!f.getParentFile().exists() && !f.getParentFile().mkdirs())
-			{
-				progressReporter.showError(Config.getString("error.dir_not_accessible", f.getParentFile(), "DIR_8"), "", null);
-				parent.setUpdating(false);
-				return;
-			}
-
-			String hash_sha256 = Util.calculateHash("SHA-256", f);
-
-			if(!checksum_sha256.equalsIgnoreCase(hash_sha256))
-			{
-				toDownload.add(file);
-			}
-		}
-
+		List<UpdateFile> toDownload = findFilesToUpdate();
 		if(!toDownload.isEmpty())
 		{
 			downloadFiles(toDownload);
@@ -450,152 +126,224 @@ public class UpdaterService
 		}
 	}
 
+	private List<UpdateFile> findFilesToRepair()
+	{
+		return findFilesNeedingDownload(true);
+	}
+
+	private List<UpdateFile> findFilesToUpdate()
+	{
+		return findFilesNeedingDownload(false);
+	}
+
+	private List<UpdateFile> findFilesNeedingDownload(boolean isRepair)
+	{
+		List<UpdateFile> result = new ArrayList<>();
+		int totalFiles = FeedManager.getFiles().size();
+		int counter = 0;
+
+		for(UpdateFile file : FeedManager.getFiles())
+		{
+			if(!file.shouldDownload() || LauncherUtils.isNativeLibraryForOtherPlatform(file.name))
+			{
+				continue;
+			}
+
+			File f = LauncherUtils.getFile(file.name);
+
+			if(file.only_if_not_exists && f.exists())
+			{
+				continue;
+			}
+
+			if(!ensureParentDirectory(f))
+			{
+				return result; // Error already reported
+			}
+
+			String actualHash = Util.calculateHash("SHA-256", f);
+			if(!file.sha256.equalsIgnoreCase(actualHash))
+			{
+				if(isRepair)
+				{
+					progressReporter.addDetail("status.files.repairing",
+							(counter * 100) / totalFiles, file.name);
+				}
+				result.add(file);
+			}
+			counter++;
+		}
+
+		return result;
+	}
+
+	private boolean ensureParentDirectory(File file)
+	{
+		File parent = file.getParentFile();
+		if(!parent.exists() && !parent.mkdirs())
+		{
+			progressReporter.showError(
+					Config.getString("error.dir_not_accessible", parent, "DIR_8"), "", null);
+			this.parent.setUpdating(false);
+			return false;
+		}
+		return true;
+	}
+
 	private void downloadFiles(List<UpdateFile> files)
 	{
-		progressReporter.setStatus(Config.getString("status.downloading"), 40);
+		progressReporter.setStatus(Config.getString("status.downloading"), 30);
 
-		completedFiles.set(0);
-		totalBytesDownloaded.set(0);
+		progress.reset(files);
 		disabledMirrors.clear();
 
-		CountDownLatch downloadLatch = new CountDownLatch(files.size());
+		CountDownLatch latch = new CountDownLatch(files.size());
 
 		for(UpdateFile file : files)
 		{
 			if(isShuttingDown)
 			{
-				downloadLatch.countDown();
+				latch.countDown();
 				continue;
 			}
 
-			DownloadTask task = new DownloadTask(file, downloadLatch);
-			activeTasks.put(file.name, task);
-			downloadExecutor.submit(task);
+			downloadExecutor.submit(new DownloadTask(file, latch));
 		}
 
 		try
 		{
-			downloadLatch.await();
+			latch.await();
+			progress.markComplete();
+			finishUpdate();
 		}
 		catch(InterruptedException e)
 		{
 			Thread.currentThread().interrupt();
 			progressReporter.showError("Download interrupted", "Error", null);
 			parent.setUpdating(false);
-			return;
 		}
-
-		finishUpdate();
 	}
 
 	private void finishUpdate()
 	{
 		progressReporter.setStatus(Config.getString("status.game_verified"), 90);
+
+		try
+		{
+			Thread.sleep(200); // Brief pause for UI
+		}
+		catch(InterruptedException e)
+		{
+			Thread.currentThread().interrupt();
+		}
+
 		progressReporter.setStatus(Config.getString("status.ready"), 100);
 		parent.setUpdating(false);
-
 		parent.getThreadBridge().asyncExec(() -> parent.getMainWindow().setCanStart(true));
 	}
 
-	private void calculateDownloadSpeed()
+	private void updateSpeed()
 	{
-		if(isShuttingDown)
+		if(!isShuttingDown)
 		{
-			return;
-		}
-
-		long currentBytes = totalBytesDownloaded.get();
-		long bytesSinceLastCheck = currentBytes - lastBytesDownloaded.get();
-		long currentTime = System.currentTimeMillis();
-		long timeDiff = currentTime - lastSpeedCalculation;
-
-		if(timeDiff > 0)
-		{
-			double bytesPerSecond = (bytesSinceLastCheck * 1000.0) / timeDiff;
-			String speedText = formatSpeed(bytesPerSecond);
-			progressReporter.setDownloadSpeed(speedText);
-		}
-
-		lastBytesDownloaded.set(currentBytes);
-		lastSpeedCalculation = currentTime;
-	}
-
-	private String formatSpeed(double bytesPerSecond)
-	{
-		if(bytesPerSecond < 1024)
-		{
-			return String.format("%.0f B/s", bytesPerSecond);
-		}
-		else if(bytesPerSecond < 1024 * 1024)
-		{
-			return String.format("%.1f KB/s", bytesPerSecond / 1024);
-		}
-		else
-		{
-			return String.format("%.1f MB/s", bytesPerSecond / (1024 * 1024));
+			String speed = progress.calculateSpeed();
+			progressReporter.setDownloadSpeed(speed);
+			progress.updateOverallProgress();
 		}
 	}
 
-	private final AtomicBoolean shutdownCalled = new AtomicBoolean(false);
+	private void clearCaches()
+	{
+		progressReporter.setStatus(Config.getString("status.delete_caches"), 20);
+
+		clearDirectory(new File(LauncherUtils.getPokemmoDir() + "/cache"), false);
+		clearPropertiesFiles(new File(LauncherUtils.getPokemmoDir() + "/config"));
+	}
+
+	private void clearDirectory(File dir, boolean deleteDir)
+	{
+		if(!dir.exists() || !dir.isDirectory()) return;
+
+		try(var pathStream = Files.walk(dir.toPath()))
+		{
+			pathStream.sorted(Comparator.reverseOrder())
+					.filter(path -> deleteDir || !path.equals(dir.toPath()))
+					.forEach(this::deleteQuietly);
+		}
+		catch(IOException e)
+		{
+			System.err.println("Error clearing directory: " + e.getMessage());
+		}
+	}
+
+	private void clearPropertiesFiles(File dir)
+	{
+		if(!dir.exists() || !dir.isDirectory()) return;
+
+		try(var pathStream = Files.list(dir.toPath()))
+		{
+			pathStream.filter(p -> p.toString().endsWith(".properties"))
+					.forEach(this::deleteQuietly);
+		}
+		catch(IOException e)
+		{
+			System.err.println("Error clearing properties files: " + e.getMessage());
+		}
+	}
+
+	private void deleteDirectoryRecursively(Path path) throws IOException
+	{
+		try(var pathStream = Files.walk(path))
+		{
+			pathStream.sorted(Comparator.reverseOrder()).forEach(p -> {
+				try
+				{
+					Files.delete(p);
+					progressReporter.showInfo("status.deleted_file", p.getFileName());
+				}
+				catch(IOException e)
+				{
+					progressReporter.showInfo("status.failed_delete", p.getFileName());
+				}
+			});
+		}
+	}
+
+	private void deleteQuietly(Path path)
+	{
+		try
+		{
+			Files.delete(path);
+		}
+		catch(IOException ignored)
+		{
+		}
+	}
 
 	public void shutdown()
 	{
-		if(!shutdownCalled.compareAndSet(false, true))
-		{
-			return;
-		}
-
 		isShuttingDown = true;
-
-		activeTasks.clear();
-
-		cleanupTempFiles();
-
-		if(shutdownHookRegistered.get())
-		{
-			try
-			{
-				Runtime.getRuntime().removeShutdownHook(shutdownHook);
-				shutdownHookRegistered.set(false);
-			}
-			catch(IllegalStateException e)
-			{
-				// Already shutting down, ignore
-			}
-			catch(Exception e)
-			{
-				System.err.println("Failed to remove shutdown hook: " + e.getMessage());
-			}
-		}
-
+		tempFiles.cleanup();
 		shutdownExecutor(speedCalculator, "Speed Calculator", 2);
 		shutdownExecutor(downloadExecutor, "Download Executor", 5);
 	}
 
 	private void shutdownExecutor(ExecutorService executor, String name, int timeoutSeconds)
 	{
-		if(executor == null || executor.isShutdown())
-		{
-			return;
-		}
+		if(executor == null || executor.isShutdown()) return;
 
 		executor.shutdown();
 		try
 		{
 			if(!executor.awaitTermination(timeoutSeconds, TimeUnit.SECONDS))
 			{
-				System.err.println(name + " didn't terminate gracefully, forcing shutdown");
+				System.err.println(name + " didn't terminate gracefully");
 				executor.shutdownNow();
-
-				if(!executor.awaitTermination(2, TimeUnit.SECONDS))
-				{
-					System.err.println(name + " didn't terminate after forced shutdown");
-				}
+				executor.awaitTermination(2, TimeUnit.SECONDS);
 			}
 		}
 		catch(InterruptedException e)
 		{
-			System.err.println(name + " shutdown interrupted");
 			executor.shutdownNow();
 			Thread.currentThread().interrupt();
 		}
@@ -606,7 +354,7 @@ public class UpdaterService
 		private final UpdateFile file;
 		private final CountDownLatch latch;
 
-		public DownloadTask(UpdateFile file, CountDownLatch latch)
+		DownloadTask(UpdateFile file, CountDownLatch latch)
 		{
 			this.file = file;
 			this.latch = latch;
@@ -617,126 +365,279 @@ public class UpdaterService
 		{
 			try
 			{
-				if(isShuttingDown)
-				{
-					return;
-				}
+				if(isShuttingDown) return;
 
-				int progress = (completedFiles.get() * 100) / activeTasks.size();
-				progressReporter.addDetail("status.files.downloading", progress, file.name);
+				progressReporter.addDetail("status.files.downloading", -1, file.name);
 
 				if(downloadFile())
 				{
-					completedFiles.incrementAndGet();
-					progress = (completedFiles.get() * 100) / activeTasks.size();
-					progressReporter.setStatus(Config.getString("status.downloading"), progress);
+					progress.markFileComplete(file);
 				}
 				else
 				{
-					progressReporter.showError(Config.getString("error.download_error", file.name), "Download Failed", null);
+					progressReporter.showError(
+							Config.getString("error.download_error", file.name),
+							"Download Failed", null);
 				}
 			}
 			finally
 			{
-				activeTasks.remove(file.name);
 				latch.countDown();
 			}
 		}
 
 		private boolean downloadFile()
 		{
-			String checksum_sha256 = file.sha256;
 			Path targetPath = LauncherUtils.getFile(file.name).toPath();
 
-			for(int mirror_index = 0; mirror_index < FeedManager.DOWNLOAD_MIRRORS.length; mirror_index++)
+			for(int mirror = 0; mirror < FeedManager.DOWNLOAD_MIRRORS.length; mirror++)
 			{
-				if(isShuttingDown)
-				{
-					return false;
-				}
+				if(isShuttingDown || disabledMirrors.contains(mirror)) continue;
 
-				if(disabledMirrors.contains(mirror_index))
-				{
-					continue;
-				}
-
-				String url = FeedManager.DOWNLOAD_MIRRORS[mirror_index] + "/" + Config.UPDATE_CHANNEL + "/current/client/" + file.name + "?v=" + file.getCacheBuster();
-
+				String url = buildDownloadUrl(mirror);
 				Path tempFile = null;
+
 				try
 				{
-					tempFile = createTempFile(targetPath);
-					activeTempFiles.add(tempFile);
+					tempFile = tempFiles.createTempFile(targetPath);
 
-					if(!downloadWithProgress(url, tempFile.toFile()))
+					if(!Util.downloadUrlToFile(LauncherUtils.httpClient, url, tempFile.toFile()))
 					{
-						progressReporter.showInfo("status.files.failed_download", file.name, mirror_index);
-						disabledMirrors.add(mirror_index);
+						handleMirrorFailure(mirror, "Download failed");
 						continue;
 					}
 
-					String new_sha256_hash = Util.calculateHash("SHA-256", tempFile.toFile());
-					if(!checksum_sha256.equalsIgnoreCase(new_sha256_hash))
+					String actualHash = Util.calculateHash("SHA-256", tempFile.toFile());
+					if(!file.sha256.equalsIgnoreCase(actualHash))
 					{
-						progressReporter.showInfo("status.files.failed_checksum", file.name, checksum_sha256, new_sha256_hash, mirror_index);
-						disabledMirrors.add(mirror_index);
+						handleMirrorFailure(mirror, "Checksum mismatch");
 						continue;
 					}
 
-					try
-					{
-						Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-					}
-					catch(IOException atomicFail)
-					{
-						Files.move(tempFile, targetPath, StandardCopyOption.REPLACE_EXISTING);
-					}
-
-					activeTempFiles.remove(tempFile);
+					moveFile(tempFile, targetPath);
+					progress.addDownloadedBytes(tempFile.toFile().length());
 					return true;
-
 				}
 				catch(IOException e)
 				{
-					progressReporter.showError(
-							Config.getString("status.title.fatal_error", tempFile != null ? tempFile.toString() : "null", targetPath.toString()),
-							Config.getString("status.title.fatal_error"),
-							null
-					);
+					reportFatalError(tempFile, targetPath);
 					return false;
 				}
 				finally
 				{
-					if(tempFile != null)
-					{
-						try
-						{
-							if(Files.exists(tempFile))
-							{
-								Files.delete(tempFile);
-								activeTempFiles.remove(tempFile);
-							}
-						}
-						catch(IOException ignored)
-						{
-						}
-					}
+					tempFiles.deleteFile(tempFile);
 				}
 			}
-
 			return false;
 		}
 
-		private boolean downloadWithProgress(String url, File destination)
+		private String buildDownloadUrl(int mirrorIndex)
 		{
-			boolean success = Util.downloadUrlToFile(LauncherUtils.httpClient, url, destination);
-
-			if(success && file.hasSizeForProgress())
-			{
-				totalBytesDownloaded.addAndGet(file.size);
-			}
-
-			return success;
+			return FeedManager.DOWNLOAD_MIRRORS[mirrorIndex] + "/" +
+					Config.UPDATE_CHANNEL + "/current/client/" +
+					file.name + "?v=" + file.getCacheBuster();
 		}
+
+		private void moveFile(Path source, Path target) throws IOException
+		{
+			try
+			{
+				Files.move(source, target, StandardCopyOption.REPLACE_EXISTING,
+						StandardCopyOption.ATOMIC_MOVE);
+			}
+			catch(IOException e)
+			{
+				Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+			}
+		}
+
+		private void handleMirrorFailure(int mirror, String reason)
+		{
+			progressReporter.showInfo("status.files.failed_download", file.name, mirror);
+			disabledMirrors.add(mirror);
+		}
+
+		private void reportFatalError(Path tempFile, Path targetPath)
+		{
+			progressReporter.showError(
+					Config.getString("status.title.fatal_error",
+							tempFile != null ? tempFile : "null", targetPath),
+					Config.getString("status.title.fatal_error"), null);
+		}
+	}
+}
+
+class ProgressTracker
+{
+	private final IProgressReporter reporter;
+	private final AtomicInteger completedFiles = new AtomicInteger(0);
+	private final AtomicLong totalBytes = new AtomicLong(0);
+	private final AtomicLong downloadedBytes = new AtomicLong(0);
+	private final AtomicLong lastBytes = new AtomicLong(0);
+
+	private volatile int totalFiles = 0;
+	private volatile long lastSpeedCalc = System.currentTimeMillis();
+	private volatile boolean isComplete = false;
+
+	ProgressTracker(IProgressReporter reporter)
+	{
+		this.reporter = reporter;
+	}
+
+	void reset(List<UpdateFile> files)
+	{
+		completedFiles.set(0);
+		totalBytes.set(0);
+		downloadedBytes.set(0);
+		lastBytes.set(0);
+		totalFiles = files.size();
+		isComplete = false;
+
+		for(UpdateFile file : files)
+		{
+			long size = file.hasSizeForProgress() ? file.size : 1024 * 1024;
+			totalBytes.addAndGet(size);
+		}
+	}
+
+	void markFileComplete(UpdateFile file)
+	{
+		completedFiles.incrementAndGet();
+	}
+
+	void addDownloadedBytes(long bytes)
+	{
+		downloadedBytes.addAndGet(bytes);
+	}
+
+	void markComplete()
+	{
+		isComplete = true;
+	}
+
+	void updateOverallProgress()
+	{
+		if(isComplete || totalFiles == 0 || totalBytes.get() == 0) return;
+
+		double byteProgress = (double) downloadedBytes.get() / totalBytes.get();
+		double fileProgress = (double) completedFiles.get() / totalFiles;
+		double combined = (byteProgress * 0.7) + (fileProgress * 0.3);
+
+		int progress = 30 + (int)(combined * 60); // 30-90% range
+		progress = Math.min(progress, 89);
+
+		reporter.setStatus("Downloading...", progress);
+	}
+
+	String calculateSpeed()
+	{
+		long current = downloadedBytes.get();
+		long delta = current - lastBytes.get();
+		long now = System.currentTimeMillis();
+		long timeDiff = now - lastSpeedCalc;
+
+		if(timeDiff > 0)
+		{
+			double bytesPerSec = (delta * 1000.0) / timeDiff;
+			lastBytes.set(current);
+			lastSpeedCalc = now;
+			return formatSpeed(bytesPerSec);
+		}
+		return "0 B/s";
+	}
+
+	private String formatSpeed(double bytesPerSec)
+	{
+		if(bytesPerSec < 1024) return String.format("%.0f B/s", bytesPerSec);
+		if(bytesPerSec < 1024 * 1024) return String.format("%.1f KB/s", bytesPerSec / 1024);
+		return String.format("%.1f MB/s", bytesPerSec / (1024 * 1024));
+	}
+}
+
+class TempFileManager
+{
+	private static final String TEMP_PREFIX = "pokemmo_download_";
+	private static final String TEMP_SUFFIX = ".tmp";
+	private final Set<Path> activeFiles = Collections.synchronizedSet(new HashSet<>());
+
+	static void cleanupOrphanedFiles()
+	{
+		try
+		{
+			LauncherUtils.setupDirectories();
+			File dir = new File(LauncherUtils.getPokemmoDir());
+			if(dir.exists())
+			{
+				cleanupTempFiles(dir);
+			}
+		}
+		catch(Exception e)
+		{
+			System.err.println("Failed to cleanup temp files: " + e.getMessage());
+		}
+	}
+
+	private static void cleanupTempFiles(File dir)
+	{
+		File[] temps = dir.listFiles((d, name) ->
+				name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX));
+
+		if(temps != null)
+		{
+			for(File temp : temps)
+			{
+				if(temp.delete())
+				{
+					System.out.println("Cleaned up temp file: " + temp.getName());
+				}
+			}
+		}
+
+		File[] subdirs = dir.listFiles(File::isDirectory);
+		if(subdirs != null)
+		{
+			for(File subdir : subdirs)
+			{
+				cleanupTempFiles(subdir);
+			}
+		}
+	}
+
+	Path createTempFile(Path target) throws IOException
+	{
+		Files.createDirectories(target.getParent());
+
+		String name = TEMP_PREFIX +
+				target.getFileName().toString().replace("/", "_") + "_" +
+				Integer.toHexString(target.hashCode() & 0x7FFFFFFF) + "_" +
+				System.currentTimeMillis() + TEMP_SUFFIX;
+
+		Path temp = target.getParent().resolve(name);
+		activeFiles.add(temp);
+		return temp;
+	}
+
+	void deleteFile(Path file)
+	{
+		if(file != null)
+		{
+			try
+			{
+				Files.deleteIfExists(file);
+				activeFiles.remove(file);
+			}
+			catch(IOException ignored)
+			{
+			}
+		}
+	}
+
+	void cleanup()
+	{
+		for(Path file : activeFiles)
+		{
+			deleteFile(file);
+		}
+		activeFiles.clear();
 	}
 }

@@ -343,14 +343,14 @@ public class UnixInstaller extends Application
 
 				System.exit(EXIT_CODE_SUCCESS);
 			}
-			catch(IOException e)
+			catch(Exception e)
 			{
 				e.printStackTrace();
 				isLaunching.set(false);
 				threadBridge.showError(
 						Config.getString("status.failed_startup"),
 						Config.getString("status.title.failed_startup"),
-						null
+						() -> System.exit(EXIT_CODE_IO_FAILURE)
 				);
 			}
 		});

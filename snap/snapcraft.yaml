@@ -64,7 +64,6 @@ parts:
     after: [ gradle ]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
-    source-branch: feat/j-dear-imgui-rewrite
     source-type: git
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |

@@ -44,11 +44,6 @@ apps:
       - home
       - joystick
       - audio-playback
-      - desktop
-      - desktop-legacy
-      - wayland
-      - x11
-      - unity7
       - removable-media
     environment:
       JAVA_HOME: "$SNAP/runtime"
@@ -56,8 +51,8 @@ apps:
       _JAVA_OPTIONS: '-Dfile.encoding="UTF-8"'
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
-      GTK_USE_PORTAL: '1'
       POKEMMO_IS_SNAPPED: '1'
+      LIBDECOR_PLUGIN_DIR: $SNAP/usr/lib/x86_64-linux-gnu/libdecor/plugins-1
 parts:
   gradle:
     plugin: nil
@@ -69,12 +64,14 @@ parts:
     after: [ gradle ]
     plugin: dump
     source: https://github.com/kyu-n/pokemmo-unix-installer.git
+    source-branch: feat/j-dear-imgui-rewrite
     source-type: git
     # I have no idea why the && is necessary, but override-build will terminate prematurely unless we chain commands after gradlew
     override-pull: |
       craftctl default && cp $CRAFT_STAGE/gradle-8.14.3-bin.zip $CRAFT_PART_SRC/gradle/wrapper/gradle-8.14.3-bin.zip
     override-build: |
       set -x
+      mkdir -p $SNAPCRAFT_PART_INSTALL/usr/lib/x86_64-linux-gnu/libdecor/plugins-1/
       case "$CRAFT_ARCH_BUILD_FOR" in
         amd64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-amd64" ;;
         arm64) export JRE_TARGET="/usr/lib/jvm/bellsoft-java21-aarch64" ;;
@@ -86,6 +83,8 @@ parts:
     stage-packages:
       - libglu1-mesa
       - zenity
+      - libdecor-0-0
+      - libdecor-0-plugin-1-gtk
     build-packages:
       - bellsoft-java21
       - ca-certificates-java

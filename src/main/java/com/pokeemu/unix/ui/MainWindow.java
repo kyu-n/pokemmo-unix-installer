@@ -41,14 +41,9 @@ public class MainWindow
 		TaskLine(String text, LogLevel level)
 		{
 			this.text = text;
-			this.level = level;
+			this.level = level != null ? level : LogLevel.INFO;
 			this.timestamp = System.currentTimeMillis();
 		}
-	}
-
-	private enum LogLevel
-	{
-		INFO, SUCCESS, WARNING, ERROR
 	}
 
 	public MainWindow(UnixInstaller parent, ImGuiThreadBridge threadBridge, int width, int height)
@@ -170,19 +165,18 @@ public class MainWindow
 	 */
 	private TaskSnapshot processAndGetSnapshot()
 	{
-		List<String> newLines = threadBridge.getAndClearTaskOutput();
+		List<ImGuiThreadBridge.TaskMessage> newMessages = threadBridge.getAndClearTaskOutput();
 
 		taskLinesLock.writeLock().lock();
 		try
 		{
-			if(!newLines.isEmpty())
+			if(!newMessages.isEmpty())
 			{
-				for(String line : newLines)
+				for(ImGuiThreadBridge.TaskMessage msg : newMessages)
 				{
-					if(line != null && !line.trim().isEmpty())
+					if(msg.text() != null && !msg.text().trim().isEmpty())
 					{
-						LogLevel level = determineLogLevel(line);
-						TaskLine taskLine = new TaskLine(line, level);
+						TaskLine taskLine = new TaskLine(msg.text(), msg.level());
 						taskLines.add(taskLine);
 					}
 				}
@@ -204,27 +198,6 @@ public class MainWindow
 		}
 	}
 
-	private LogLevel determineLogLevel(String line)
-	{
-		String upperLine = line.toUpperCase();
-		if(upperLine.contains("ERROR") || upperLine.contains("FAILED") || upperLine.contains("FATAL"))
-		{
-			return LogLevel.ERROR;
-		}
-		else if(upperLine.contains("WARNING") || upperLine.contains("WARN"))
-		{
-			return LogLevel.WARNING;
-		}
-		else if(upperLine.contains("SUCCESS") || upperLine.contains("COMPLETE") || upperLine.contains("OK"))
-		{
-			return LogLevel.SUCCESS;
-		}
-		else
-		{
-			return LogLevel.INFO;
-		}
-	}
-
 	private void renderTaskLines(List<TaskLine> snapshot)
 	{
 		ImGui.pushStyleVar(imgui.flag.ImGuiStyleVar.ItemSpacing, 0, 2);
@@ -242,6 +215,9 @@ public class MainWindow
 					break;
 				case SUCCESS:
 					color = ImGuiStyleManager.COLOR_SUCCESS;
+					break;
+				case DEBUG:
+					color = ImGuiStyleManager.COLOR_TEXT_MUTED;
 					break;
 				default:
 					break;
@@ -363,9 +339,13 @@ public class MainWindow
 
 	public void addTaskLine(String line)
 	{
+		addTaskLine(line, LogLevel.INFO);
+	}
+
+	public void addTaskLine(String line, LogLevel level)
+	{
 		if(line != null && !line.trim().isEmpty())
 		{
-			LogLevel level = determineLogLevel(line);
 			TaskLine taskLine = new TaskLine(line, level);
 
 			taskLinesLock.writeLock().lock();

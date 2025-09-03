@@ -11,7 +11,7 @@ import com.pokeemu.unix.config.Config;
 public class ImGuiThreadBridge implements IProgressReporter
 {
 	private final ConcurrentLinkedQueue<Runnable> uiUpdates = new ConcurrentLinkedQueue<>();
-	private final ConcurrentLinkedQueue<String> taskOutput = new ConcurrentLinkedQueue<>();
+	private final ConcurrentLinkedQueue<TaskMessage> taskOutput = new ConcurrentLinkedQueue<>();
 	private final AtomicReference<String> statusMessage = new AtomicReference<>("");
 	private final AtomicInteger progress = new AtomicInteger(0);
 	private final AtomicReference<String> downloadSpeed = new AtomicReference<>("");
@@ -21,6 +21,8 @@ public class ImGuiThreadBridge implements IProgressReporter
 	private static final int MAX_UI_UPDATES_PER_FRAME = 20;
 	private static final int MAX_TASK_LINES_PER_FRAME = 50;
 	private static final int MAX_DIALOGS_PER_FRAME = 3;
+
+	public record TaskMessage(String text, LogLevel level) {};
 
 	public void asyncExec(Runnable runnable)
 	{
@@ -87,7 +89,8 @@ public class ImGuiThreadBridge implements IProgressReporter
 			String formatted = Config.getString(messageKey, params);
 			if(!formatted.isEmpty())
 			{
-				taskOutput.offer(formatted);
+				LogLevel level = determineLogLevelFromKey(messageKey);
+				taskOutput.offer(new TaskMessage(formatted, level));
 			}
 
 			if(progressValue >= 0 && progressValue <= 100)
@@ -114,7 +117,7 @@ public class ImGuiThreadBridge implements IProgressReporter
 	@Override
 	public void showInfo(String messageKey, Object... params)
 	{
-		addDetail(messageKey, -1, params);
+		addDetailWithLevel(messageKey, LogLevel.INFO, -1, params);
 	}
 
 	@Override
@@ -123,6 +126,100 @@ public class ImGuiThreadBridge implements IProgressReporter
 		if(message != null)
 		{
 			dialogRequests.offer(new DialogRequest(DialogType.ERROR, message, title, onClose));
+			taskOutput.offer(new TaskMessage("ERROR: " + message, LogLevel.ERROR));
+		}
+	}
+
+	/**
+	 * Add a detail message with explicit log level
+	 */
+	public void addDetailWithLevel(String messageKey, LogLevel level, int progressValue, Object... params)
+	{
+		try
+		{
+			String formatted = Config.getString(messageKey, params);
+			if(!formatted.isEmpty())
+			{
+				taskOutput.offer(new TaskMessage(formatted, level));
+			}
+
+			if(progressValue >= 0 && progressValue <= 100)
+			{
+				progress.set(progressValue);
+			}
+		}
+		catch(Exception e)
+		{
+			System.err.println("Error formatting message: " + messageKey);
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * Add a raw task line with explicit log level
+	 */
+	public void addTaskLine(String text, LogLevel level)
+	{
+		if(text != null && !text.trim().isEmpty())
+		{
+			taskOutput.offer(new TaskMessage(text, level));
+		}
+	}
+
+	/**
+	 * Determine log level from message key patterns
+	 */
+	private LogLevel determineLogLevelFromKey(String messageKey)
+	{
+		if(messageKey == null)
+		{
+			return LogLevel.INFO;
+		}
+
+		// Check for semantic patterns in message keys
+		String key = messageKey.toLowerCase();
+
+		if(key.contains("error") ||
+				key.contains("failed") ||
+				key.contains("fail") ||
+				key.contains("fatal") ||
+				key.contains("corrupt") ||
+				key.contains("invalid") ||
+				key.contains("not_accessible") ||
+				key.contains("not_found") ||
+				key.contains("exception") ||
+				key.contains("cant_") ||
+				key.contains("cannot_") ||
+				key.contains("unable"))
+		{
+			return LogLevel.ERROR;
+		}
+		else if(key.contains("warning") ||
+				key.contains("warn") ||
+				key.contains("repair") ||
+				key.contains("retry") ||
+				key.contains("timeout") ||
+				key.contains("slow"))
+		{
+			return LogLevel.WARNING;
+		}
+		else if(key.contains("success") ||
+				key.contains("complete") ||
+				key.contains("verified") ||
+				key.contains("ready") ||
+				key.contains("ok") ||
+				key.contains("done"))
+		{
+			return LogLevel.SUCCESS;
+		}
+		else if(key.contains("debug") ||
+				key.contains("trace"))
+		{
+			return LogLevel.DEBUG;
+		}
+		else
+		{
+			return LogLevel.INFO;
 		}
 	}
 
@@ -157,19 +254,19 @@ public class ImGuiThreadBridge implements IProgressReporter
 		return downloadSpeed.get();
 	}
 
-	public List<String> getAndClearTaskOutput()
+	public List<TaskMessage> getAndClearTaskOutput()
 	{
-		List<String> lines = new ArrayList<>();
-		String line;
+		List<TaskMessage> messages = new ArrayList<>();
+		TaskMessage msg;
 		int count = 0;
 
-		while((line = taskOutput.poll()) != null && count < MAX_TASK_LINES_PER_FRAME)
+		while((msg = taskOutput.poll()) != null && count < MAX_TASK_LINES_PER_FRAME)
 		{
-			lines.add(line);
+			messages.add(msg);
 			count++;
 		}
 
-		return lines;
+		return messages;
 	}
 
 	public void clearPendingUpdates()

@@ -526,7 +526,7 @@ class ProgressTracker
 		int progress = 30 + (int)(combined * 60); // 30-90% range
 		progress = Math.min(progress, 89);
 
-		reporter.setStatus("Downloading...", progress);
+		reporter.setStatus(Config.getString("status.downloading"), progress);
 	}
 
 	String calculateSpeed()

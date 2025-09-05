@@ -503,7 +503,7 @@ public class UnixInstaller extends Application
 				// Configure GLFW for Wayland
 				GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
 				GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
-				GLFW.glfwWindowHintString(GLFW.GLFW_WAYLAND_APP_ID, "com.pokemmo.PokeMMOSettings");
+				GLFW.glfwWindowHintString(GLFW.GLFW_WAYLAND_APP_ID, "com.pokemmo.PokeMMO.Settings");
 			}
 		}
 

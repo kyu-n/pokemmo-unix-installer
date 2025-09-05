@@ -20,6 +20,7 @@ import com.pokeemu.unix.ui.MessageDialog;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdaterService;
 
+import com.pokeemu.unix.util.DisplayServerManager;
 import com.pokeemu.unix.util.GnomeThemeDetector;
 
 import imgui.ImGui;
@@ -31,7 +32,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class UnixInstaller extends Application
 {
-	public static final int INSTALLER_VERSION = 30;
+	public static final String INSTALLER_VERSION = "3.0b";
 
 	public static final int EXIT_CODE_SUCCESS = 0;
 	public static final int EXIT_CODE_NETWORK_FAILURE = 1;
@@ -491,100 +492,20 @@ public class UnixInstaller extends Application
 
 	private static void detectAndLogDisplayServer()
 	{
-		System.out.println("=================================================");
-		System.out.println("[DEBUG] Display Server Detection:");
+		DisplayServerManager.logDisplayServerInfo();
 
-		// Primary detection methods
-		String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
-		String xdgSessionType = System.getenv("XDG_SESSION_TYPE");
-		String display = System.getenv("DISPLAY");
-
-		// Desktop environment detection
-		String xdgCurrentDesktop = System.getenv("XDG_CURRENT_DESKTOP");
-		String desktopSession = System.getenv("DESKTOP_SESSION");
-		String kdeFullSession = System.getenv("KDE_FULL_SESSION");
-
-		// Container detection
-		String flatpakId = System.getenv("FLATPAK_ID");
-		String snapName = System.getenv("SNAP_NAME");
-		String snapRevision = System.getenv("SNAP_REVISION");
-
-		// Determine display server
-		String displayServer = "Unknown";
-		if("wayland".equalsIgnoreCase(xdgSessionType) || waylandDisplay != null)
+		DisplayServerManager.DisplayServer detected = DisplayServerManager.detectDisplayServer();
+		if(detected == DisplayServerManager.DisplayServer.WAYLAND)
 		{
-			displayServer = "Wayland";
+			String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
 			if(waylandDisplay != null)
 			{
-				displayServer += " (WAYLAND_DISPLAY=" + waylandDisplay + ")";
-
+				// Configure GLFW for Wayland
 				GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
 				GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
 			}
 		}
-		else if("x11".equalsIgnoreCase(xdgSessionType) || display != null)
-		{
-			displayServer = "X11";
-			if(display != null)
-			{
-				displayServer += " (DISPLAY=" + display + ")";
-			}
-		}
 
-		System.out.println("Display Server: " + displayServer);
-		System.out.println("XDG_SESSION_TYPE: " + (xdgSessionType != null ? xdgSessionType : "not set"));
-
-		// Desktop environment
-		System.out.println("Desktop Environment: " +
-				(xdgCurrentDesktop != null ? xdgCurrentDesktop : "unknown"));
-		if(desktopSession != null)
-		{
-			System.out.println("Desktop Session: " + desktopSession);
-		}
-
-		// Specific DE detection
-		if(kdeFullSession != null)
-		{
-			System.out.println("KDE Detected: KDE_FULL_SESSION=" + kdeFullSession);
-		}
-
-		// Container environment
-		if(flatpakId != null)
-		{
-			System.out.println("Running in Flatpak: " + flatpakId);
-		}
-		if(snapName != null)
-		{
-			System.out.println("Running in Snap: " + snapName + " (rev: " + snapRevision + ")");
-		}
-
-		// Theme detection
 		boolean isDarkTheme = GnomeThemeDetector.isDark();
 		System.out.println("Theme Detection: " + (isDarkTheme ? "Dark" : "Light"));
-
-		// Additional environment info
-		String gtkTheme = System.getenv("GTK_THEME");
-		if(gtkTheme != null)
-		{
-			System.out.println("GTK_THEME: " + gtkTheme);
-		}
-
-		String qtStyle = System.getenv("QT_STYLE_OVERRIDE");
-		if(qtStyle != null)
-		{
-			System.out.println("QT_STYLE_OVERRIDE: " + qtStyle);
-		}
-
-		// Graphics info
-		String glVendor = System.getProperty("jogl.vendor");
-		String glRenderer = System.getProperty("jogl.renderer");
-		if(glVendor != null || glRenderer != null)
-		{
-			System.out.println("Graphics: " +
-					(glVendor != null ? glVendor : "unknown") + " / " +
-					(glRenderer != null ? glRenderer : "unknown"));
-		}
-
-		System.out.println("=================================================");
-	}
-}
+	}}

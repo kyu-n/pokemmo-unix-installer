@@ -15,6 +15,7 @@ import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.FeedSocketServer;
 import com.pokeemu.unix.updater.UpdateFile;
+import com.pokeemu.unix.util.DisplayServerManager;
 import com.pokeemu.unix.util.Util;
 
 public class LauncherUtils
@@ -215,7 +216,7 @@ public class LauncherUtils
 	{
 		Map<String, String> env = new HashMap<>();
 
-		env.put("POKEMMO_UNIX_LAUNCHER_VER", Integer.toString(UnixInstaller.INSTALLER_VERSION));
+		env.put("POKEMMO_UNIX_LAUNCHER_VER", UnixInstaller.INSTALLER_VERSION);
 
 		if(snapcraft != null)
 		{
@@ -223,7 +224,8 @@ public class LauncherUtils
 		}
 		if(flatpak != null)
 		{
-			env.put("POKEMMO_IS_FLATPAKED", flatpak);
+			System.out.println("Skipping Flatpak env variable to prevent client breakage");
+//			env.put("POKEMMO_IS_FLATPAKED", flatpak);
 		}
 
 		return env;
@@ -270,6 +272,8 @@ public class LauncherUtils
 		}
 
 		pb.environment().putAll(environment);
+
+		DisplayServerManager.fixCompositorSettings();
 
 		System.out.println("Launching game: " + String.join(" ", args));
 

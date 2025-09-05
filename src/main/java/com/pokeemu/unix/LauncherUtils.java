@@ -221,6 +221,7 @@ public class LauncherUtils
 		{
 			env.put("POKEMMO_IS_SNAPPED", snapcraft);
 		}
+
 //		if(flatpak != null)
 //		{
 //			env.put("POKEMMO_IS_FLATPAKED", flatpak);

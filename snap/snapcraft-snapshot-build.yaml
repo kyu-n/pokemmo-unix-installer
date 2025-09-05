@@ -3,7 +3,7 @@
 name: pokemmo
 title: PokeMMO
 base: core24
-version: '3.0b'
+version: '3.0c'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 grade: stable

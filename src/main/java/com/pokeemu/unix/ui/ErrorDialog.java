@@ -352,7 +352,7 @@ public class ErrorDialog extends AbstractModalWindow
 						"-------------------\n" +
 						"OS: %s %s\n" +
 						"Java: %s\n" +
-						"Installer Version: %d",
+						"Installer Version: %s",
 				errorType.name(),
 				errorMessage != null ? errorMessage : "Unknown",
 				stackTrace != null ? stackTrace : "No stack trace available",
@@ -364,8 +364,7 @@ public class ErrorDialog extends AbstractModalWindow
 
 		try
 		{
-			StringSelection selection = new StringSelection(fullDetails);
-			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+			ImGui.setClipboardText(fullDetails);
 		}
 		catch(Exception e)
 		{

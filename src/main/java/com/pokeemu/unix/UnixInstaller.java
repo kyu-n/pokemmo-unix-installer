@@ -32,7 +32,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class UnixInstaller extends Application
 {
-	public static final String INSTALLER_VERSION = "3.0c";
+	public static final String INSTALLER_VERSION = "3.0d";
 
 	public static final int EXIT_CODE_SUCCESS = 0;
 	public static final int EXIT_CODE_NETWORK_FAILURE = 1;

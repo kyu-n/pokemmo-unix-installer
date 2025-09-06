@@ -2,7 +2,9 @@ package com.pokeemu.unix;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -151,6 +153,16 @@ public class HeadlessLauncher
 					}
 				}
 			}
+			catch(CancellationException e)
+			{
+				// This is expected when we cancel due to timeout - already handled via feedsTimedOut flag
+				if(!feedsTimedOut.get())
+				{
+					// Unexpected cancellation
+					networkException = e;
+					setNeedsUI("Feed download was cancelled");
+				}
+			}
 			catch(TimeoutException e)
 			{
 				feedsTimedOut.set(true);
@@ -176,6 +188,26 @@ public class HeadlessLauncher
 
 				networkException = e;
 				setNeedsUI("Feed download interrupted");
+			}
+			catch(ExecutionException e)
+			{
+				// Unwrap the actual cause
+				Throwable cause = e.getCause();
+				if(cause instanceof CancellationException)
+				{
+					// Handle as cancellation
+					if(!feedsTimedOut.get())
+					{
+						networkException = cause;
+						setNeedsUI("Feed download was cancelled");
+					}
+				}
+				else
+				{
+					// Real execution error
+					networkException = cause != null ? cause : e;
+					setNeedsUI("Feed download failed: " + networkException.getMessage());
+				}
 			}
 			catch(Exception e)
 			{

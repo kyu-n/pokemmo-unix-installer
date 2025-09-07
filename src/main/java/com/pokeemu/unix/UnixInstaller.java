@@ -18,6 +18,7 @@ import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.glfw.GLFWWindowSizeCallback;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.GL32;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -139,6 +140,14 @@ public class UnixInstaller extends Application
 		} else {
 			GLFW.glfwShowWindow(handle);
 		}
+
+		// super.clearBuffer()
+		GL32.glClearColor(colorBg.getRed(), colorBg.getGreen(), colorBg.getBlue(), colorBg.getAlpha());
+		GL32.glClear(GL32.GL_COLOR_BUFFER_BIT | GL32.GL_DEPTH_BUFFER_BIT);
+
+		// super.renderBuffer()
+		GLFW.glfwSwapBuffers(handle);
+		GLFW.glfwPollEvents();
 
 		GLFW.glfwSetWindowSizeCallback(handle, new GLFWWindowSizeCallback() {
 			@Override

@@ -2,12 +2,24 @@ package com.pokeemu.unix;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.glfw.GLFWVidMode;
+import org.lwjgl.glfw.GLFWWindowSizeCallback;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 import com.pokeemu.unix.config.Config;
 import com.pokeemu.unix.ui.ConfigWindow;
@@ -19,7 +31,6 @@ import com.pokeemu.unix.ui.MainWindow;
 import com.pokeemu.unix.ui.MessageDialog;
 import com.pokeemu.unix.updater.FeedManager;
 import com.pokeemu.unix.updater.UpdaterService;
-
 import com.pokeemu.unix.util.DisplayServerManager;
 import com.pokeemu.unix.util.GnomeThemeDetector;
 
@@ -27,8 +38,6 @@ import imgui.ImGui;
 import imgui.app.Application;
 import imgui.app.Configuration;
 import imgui.flag.ImGuiConfigFlags;
-
-import org.lwjgl.glfw.GLFW;
 
 public class UnixInstaller extends Application
 {
@@ -58,6 +67,86 @@ public class UnixInstaller extends Application
 	private UpdaterService updaterService;
 
 	private static Throwable headlessException = null;
+
+	@Override
+	protected void initWindow(final Configuration config) {
+		GLFWErrorCallback.createPrint(System.err).set();
+
+		if (!GLFW.glfwInit()) {
+			throw new IllegalStateException("Unable to initialize GLFW");
+		}
+
+		DisplayServerManager.DisplayServer detected = DisplayServerManager.detectDisplayServer();
+		if(detected == DisplayServerManager.DisplayServer.WAYLAND)
+		{
+			// Configure GLFW for Wayland
+			GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
+			GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
+			GLFW.glfwWindowHintString(GLFW.GLFW_WAYLAND_APP_ID, "com.pokemmo.PokeMMO");
+		}
+		else
+		{
+			GLFW.glfwWindowHintString(GLFW.GLFW_X11_INSTANCE_NAME, "pokemmo-launcher-"+ProcessHandle.current().pid());
+			GLFW.glfwWindowHintString(GLFW.GLFW_X11_CLASS_NAME, "PokeMMOSettings");
+		}
+
+		Field[] allFields = this.getClass().getDeclaredFields();
+		for(Field field : allFields)
+		{
+			if(Modifier.isPrivate(field.getModifiers()) && !Modifier.isStatic(field.getModifiers()))
+			{
+				try
+				{
+					if(field.getName().equals("glslVersion"))
+					{
+						field.setAccessible(true);
+						field.set(this, "#version 130");
+						break;
+					}
+				}
+				catch(Exception e)
+				{
+					e.printStackTrace();
+				}
+			}
+		}
+
+		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
+		GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 0);
+
+		GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
+		handle = GLFW.glfwCreateWindow(config.getWidth(), config.getHeight(), config.getTitle(), MemoryUtil.NULL, MemoryUtil.NULL);
+
+		if (handle == MemoryUtil.NULL) {
+			throw new RuntimeException("Failed to create the GLFW window");
+		}
+
+		try (MemoryStack stack = MemoryStack.stackPush()) {
+			final IntBuffer pWidth = stack.mallocInt(1); // int*
+			final IntBuffer pHeight = stack.mallocInt(1); // int*
+
+			GLFW.glfwGetWindowSize(handle, pWidth, pHeight);
+			final GLFWVidMode vidmode = Objects.requireNonNull(GLFW.glfwGetVideoMode(GLFW.glfwGetPrimaryMonitor()));
+			GLFW.glfwSetWindowPos(handle, (vidmode.width() - pWidth.get(0)) / 2, (vidmode.height() - pHeight.get(0)) / 2);
+		}
+
+		GLFW.glfwMakeContextCurrent(handle);
+		GL.createCapabilities();
+		GLFW.glfwSwapInterval(GLFW.GLFW_TRUE);
+
+		if (config.isFullScreen()) {
+			GLFW.glfwMaximizeWindow(handle);
+		} else {
+			GLFW.glfwShowWindow(handle);
+		}
+
+		GLFW.glfwSetWindowSizeCallback(handle, new GLFWWindowSizeCallback() {
+			@Override
+			public void invoke(final long window, final int width, final int height) {
+				runFrame();
+			}
+		});
+	}
 
 	@Override
 	protected void configure(Configuration config)
@@ -492,21 +581,8 @@ public class UnixInstaller extends Application
 
 	private static void detectAndLogDisplayServer()
 	{
+
 		DisplayServerManager.logDisplayServerInfo();
-
-		DisplayServerManager.DisplayServer detected = DisplayServerManager.detectDisplayServer();
-		if(detected == DisplayServerManager.DisplayServer.WAYLAND)
-		{
-			String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
-			if(waylandDisplay != null)
-			{
-				// Configure GLFW for Wayland
-				GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
-				GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
-				GLFW.glfwWindowHintString(GLFW.GLFW_WAYLAND_APP_ID, "com.pokemmo.PokeMMO.Settings");
-			}
-		}
-
 		boolean isDarkTheme = GnomeThemeDetector.isDark();
 		System.out.println("Theme Detection: " + (isDarkTheme ? "Dark" : "Light"));
 	}}

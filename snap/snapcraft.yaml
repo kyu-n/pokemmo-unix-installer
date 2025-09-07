@@ -56,9 +56,9 @@ apps:
 parts:
   pokemmo:
     plugin: dump
-    source: https://github.com/kyu-n/pokemmo-unix-installer/releases/download/v3.0d-stable/v3.0d-stable.zip
+    source: https://github.com/kyu-n/pokemmo-unix-installer/releases/download/v3.0e-stable/v3.0e-stable.zip
     source-type: zip
-    source-checksum: sha256/6f060276265e68614d07bfbe7dee947d78ce0d27f37296f19e614a881c524e22
+    source-checksum: sha256/e0f1720ef9ce5a6a08d517ca846fec31e57fc2b720f25e810bb25bc4d1e81d4a
     override-build: |
       # The JAR is already extracted by the dump plugin
       mkdir -p $CRAFT_PART_INSTALL/jar

@@ -73,16 +73,20 @@ public class UnixInstaller extends Application
 	protected void initWindow(final Configuration config) {
 		GLFWErrorCallback.createPrint(System.err).set();
 
+		DisplayServerManager.DisplayServer detected = DisplayServerManager.detectDisplayServer();
+
+		if(detected == DisplayServerManager.DisplayServer.WAYLAND)
+		{
+			GLFW.glfwInitHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
+		}
+
 		if (!GLFW.glfwInit()) {
 			throw new IllegalStateException("Unable to initialize GLFW");
 		}
 
-		DisplayServerManager.DisplayServer detected = DisplayServerManager.detectDisplayServer();
 		if(detected == DisplayServerManager.DisplayServer.WAYLAND)
 		{
-			// Configure GLFW for Wayland
 			GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, GLFW.GLFW_TRUE);
-			GLFW.glfwWindowHint(GLFW.GLFW_WAYLAND_LIBDECOR, GLFW.GLFW_WAYLAND_PREFER_LIBDECOR);
 			GLFW.glfwWindowHintString(GLFW.GLFW_WAYLAND_APP_ID, "com.pokemmo.PokeMMO");
 		}
 		else

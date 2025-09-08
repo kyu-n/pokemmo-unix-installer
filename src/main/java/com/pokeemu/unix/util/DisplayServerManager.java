@@ -8,6 +8,8 @@ import java.util.Properties;
 
 import com.pokeemu.unix.LauncherUtils;
 
+import org.lwjgl.glfw.GLFW;
+
 /**
  * Manages display server detection and configuration for the game client.
  * Ensures the game launches with the correct compositor settings.
@@ -33,61 +35,42 @@ public class DisplayServerManager
 		}
 	}
 
-	/**
-	 * Detect the current display server based on environment variables
-	 */
+	private static boolean isCrostini()
+	{
+		return System.getenv().keySet().stream()
+				.anyMatch(key -> key.startsWith("SOMMELIER_"));
+	}
+
 	public static DisplayServer detectDisplayServer()
 	{
-		// Primary detection methods
-		String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
-		String xdgSessionType = System.getenv("XDG_SESSION_TYPE");
-		String display = System.getenv("DISPLAY");
-
-		// Flatpak-specific checks
-		boolean inFlatpak = System.getenv("FLATPAK_ID") != null;
-
-		// Check for Wayland
-		if("wayland".equalsIgnoreCase(xdgSessionType))
-		{
-			return DisplayServer.WAYLAND;
-		}
-
-		if(waylandDisplay != null && !waylandDisplay.isEmpty())
-		{
-			return DisplayServer.WAYLAND;
-		}
-
-		// Check for X11
-		if("x11".equalsIgnoreCase(xdgSessionType))
+		if(isCrostini())
 		{
 			return DisplayServer.X11;
 		}
 
-		if(display != null && !display.isEmpty())
+		if(isWaylandAvailable())
 		{
-			// In Flatpak, DISPLAY might be set even in Wayland sessions
-			// Double-check if we're really in X11
-			if(inFlatpak)
-			{
-				// If we have both DISPLAY and WAYLAND_DISPLAY, prefer Wayland
-				if(waylandDisplay != null)
-				{
-					return DisplayServer.WAYLAND;
-				}
+			return DisplayServer.WAYLAND;
+		}
 
-				// Check if XDG_SESSION_TYPE is explicitly set
-				if(xdgSessionType != null)
-				{
-					return "wayland".equalsIgnoreCase(xdgSessionType) ?
-							DisplayServer.WAYLAND : DisplayServer.X11;
-				}
-			}
-
+		if(isX11Available())
+		{
 			return DisplayServer.X11;
 		}
 
-		// Unable to determine
 		return DisplayServer.UNKNOWN;
+	}
+
+	public static boolean isWaylandAvailable()
+	{
+		String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
+		return GLFW.glfwPlatformSupported(GLFW.GLFW_PLATFORM_WAYLAND) && waylandDisplay != null && !waylandDisplay.isEmpty();
+	}
+
+	public static boolean isX11Available()
+	{
+		String x11Display = System.getenv("DISPLAY");
+		return GLFW.glfwPlatformSupported(GLFW.GLFW_PLATFORM_X11) && x11Display != null && !x11Display.isEmpty();
 	}
 
 	/**

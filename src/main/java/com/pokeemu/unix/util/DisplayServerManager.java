@@ -98,9 +98,6 @@ public class DisplayServerManager
 		}
 
 		DisplayServer detected = detectDisplayServer();
-
-
-		// Determine what to set
 		boolean needsUpdate = false;
 		String newCompositor = null;
 
@@ -112,8 +109,7 @@ public class DisplayServerManager
 			System.out.println("Running in Flatpak container - checking for Wayland availability");
 
 			// Check if Wayland is actually available
-			String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
-			if(waylandDisplay != null && !waylandDisplay.isEmpty())
+			if(detected == DisplayServer.WAYLAND)
 			{
 				// Force Wayland regardless of user settings
 				if(!"Wayland".equals(currentCompositor))
@@ -180,8 +176,7 @@ public class DisplayServerManager
 		}
 
 		// Final detection result
-		DisplayServer detected = detectDisplayServer();
-		System.out.println("Detected Display Server: " + detected.getValue());
+		System.out.println("Detected Display Server: " + detectDisplayServer().getValue());
 		System.out.println("=================================================");
 	}
 }

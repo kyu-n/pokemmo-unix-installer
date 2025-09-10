@@ -1,7 +1,7 @@
 name: pokemmo
 title: PokeMMO
 base: core24
-version: '3.0e'
+version: '3.0f'
 summary: PokeMMO Game Client
 license: 'Proprietary'
 grade: stable
@@ -56,9 +56,9 @@ apps:
 parts:
   pokemmo:
     plugin: dump
-    source: https://github.com/kyu-n/pokemmo-unix-installer/releases/download/v3.0e-stable/v3.0e-stable.zip
+    source: https://github.com/kyu-n/pokemmo-unix-installer/releases/download/v3.0f-stable/v3.0f-stable.zip
     source-type: zip
-    source-checksum: sha256/e0f1720ef9ce5a6a08d517ca846fec31e57fc2b720f25e810bb25bc4d1e81d4a
+    source-checksum: sha256/c88748c3d9716dea94b2a032acaf47643b41d891717c85934d33b1b89b2a94c2
     override-build: |
       # The JAR is already extracted by the dump plugin
       mkdir -p $CRAFT_PART_INSTALL/jar

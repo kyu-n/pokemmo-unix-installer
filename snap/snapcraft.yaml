@@ -51,6 +51,7 @@ apps:
       XDG_DATA_HOME: "$SNAP/usr/share"
       XDG_CONFIG_HOME: "$XDG_DATA_HOME/.config"
       POKEMMO_IS_SNAPPED: '1'
+      __GL_THREADED_OPTIMIZATIONS: '0' # Workaround for NVIDIA proprietary driver issues. See LWJGL/lwjgl3#1071
       LIBDECOR_PLUGIN_DIR: $SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/libdecor/plugins-1
 
 parts:
